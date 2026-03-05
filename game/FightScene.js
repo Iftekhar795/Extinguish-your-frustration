@@ -106,6 +106,10 @@ class FightScene extends Phaser.Scene {
         this._arenaIdx     = cfg.arenaIndex    !== undefined ? cfg.arenaIndex  : 0;
         this._difficulty   = cfg.difficulty    !== undefined ? cfg.difficulty   : 1;
 
+        // Persistent defeat counter (survives scene restarts via global)
+        if (window._defeatedCount === undefined) window._defeatedCount = 0;
+        this._defeatedCount = window._defeatedCount;
+
         // Reset all per-session state so that scene.restart() (rematch) works correctly.
         // The constructor is NOT re-called on restart, so this is the only safe reset point.
         this._round       = 1;
@@ -145,12 +149,43 @@ class FightScene extends Phaser.Scene {
             x: W - 115,
             y: groundY,
             facingRight: false,
-            difficulty: this._difficulty,
+            difficulty:     this._difficulty,
+            defeatedCount:  this._defeatedCount,
         };
 
         this.player = new Fighter(this, playerCfg);
         this.enemy  = new EnemyAI(this, enemyCfg);
         this.enemy.setPlayer(this.player);
+
+        // ── Scale enemy stats by defeat count ────────────────
+        const dc = this._defeatedCount;
+        const isBoss = dc >= 9;
+
+        if (isBoss) {
+            // FINAL BOSS: 1.6x size, 300 HP, doubled damage, fiery scheme
+            this.enemy._drawScale = 1.60;
+            this.enemy.isBoss     = true;
+            this.enemy.maxHp      = 300;
+            this.enemy.hp         = 300;
+            this.enemy.bodyColor  = 0x880000;
+            this.enemy.pantsColor = 0x1a0000;
+            this.enemy.skinColor  = 0xCC4400;
+            const dmgMul = 2.0;
+            for (const k of Object.keys(this.enemy._attacks)) {
+                this.enemy._attacks[k].damage = Math.round(this.enemy._attacks[k].damage * dmgMul);
+            }
+        } else if (dc > 0) {
+            // Levels 1-8: progressively stronger (boss at dc=9 is handled above)
+            const scaleFactor = 1.0 + dc * 0.06;     // 1.06 … 1.48 at dc=8
+            const hpBonus     = dc * 20;              // +20 HP per defeat (max +160)
+            const dmgMul      = 1.0 + dc * 0.10;     // 1.10 … 1.80 damage multiplier
+            this.enemy._drawScale = scaleFactor;
+            this.enemy.maxHp = 100 + hpBonus;
+            this.enemy.hp    = this.enemy.maxHp;
+            for (const k of Object.keys(this.enemy._attacks)) {
+                this.enemy._attacks[k].damage = Math.round(this.enemy._attacks[k].damage * dmgMul);
+            }
+        }
 
         // ── Projectile system ─────────────────────────────────
         this._projectiles = [];
@@ -165,8 +200,12 @@ class FightScene extends Phaser.Scene {
         // ── input ────────────────────────────────────────────
         this._setupInput();
 
-        // ── "Round 1 – FIGHT!" splash ─────────────────────────
-        this._showRoundSplash();
+        // ── "Round 1 – FIGHT!" splash (boss gets special intro) ──
+        if (isBoss) {
+            this._showBossIntro();
+        } else {
+            this._showRoundSplash();
+        }
     }
 
     update(time, delta) {
@@ -679,6 +718,20 @@ class FightScene extends Phaser.Scene {
         // ── Round label ───────────────────────────────────────
         this._roundLabel = this.add.text(cx, barY + barH + 4, `ROUND ${this._round}`, {
             fontSize: '10px', fontFamily: 'Arial', color: '#889999',
+        }).setOrigin(0.5, 0);
+
+        // ── Fight number / boss indicator badge ───────────────
+        const fightNum = this._defeatedCount + 1;
+        const isBossHUD = this._defeatedCount >= 9;
+        const badgeText = isBossHUD ? '☠ FINAL BOSS ☠' : `Fight  ${fightNum} / 10`;
+        const badgeColor = isBossHUD ? '#FF2200' : (fightNum >= 8 ? '#FF8800' : '#88AACC');
+        this.add.text(cx, 1, badgeText, {
+            fontSize: isBossHUD ? '11px' : '9px',
+            fontFamily: 'Arial Black, Arial',
+            fontStyle: 'bold',
+            color: badgeColor,
+            stroke: '#000000',
+            strokeThickness: isBossHUD ? 3 : 2,
         }).setOrigin(0.5, 0);
 
         // ── Win pips ──────────────────────────────────────────
@@ -1378,10 +1431,66 @@ class FightScene extends Phaser.Scene {
         this._showRoundSplash();
     }
 
+    /** Special full-screen intro for the final boss fight */
+    _showBossIntro() {
+        const W  = this.scale.width;
+        const H  = this.scale.height;
+
+        // Red flash overlay
+        const overlay = this.add.graphics();
+        overlay.fillStyle(0x330000, 0.85);
+        overlay.fillRect(0, 0, W, H);
+        overlay.setAlpha(0);
+
+        this.tweens.add({ targets: overlay, alpha: 1, duration: 180, yoyo: true, hold: 1600,
+            onComplete: () => overlay.destroy() });
+
+        const warnTxt = this.add.text(W / 2, H * 0.30, '⚠ WARNING ⚠', {
+            fontSize: '36px', fontFamily: 'Arial Black, Arial', fontStyle: 'bold',
+            color: '#FF2200', stroke: '#000000', strokeThickness: 5,
+        }).setOrigin(0.5).setAlpha(0);
+
+        const bossTxt = this.add.text(W / 2, H * 0.44, '☠  FINAL BOSS  ☠', {
+            fontSize: '48px', fontFamily: 'Arial Black, Arial', fontStyle: 'bold',
+            color: '#FF6600', stroke: '#000000', strokeThickness: 7,
+        }).setOrigin(0.5).setScale(0).setAlpha(0);
+
+        const subTxt = this.add.text(W / 2, H * 0.58, 'Maximum power unlocked.\nDefeat it if you can!', {
+            fontSize: '18px', fontFamily: 'Arial Black, Arial',
+            color: '#FFAA44', stroke: '#000000', strokeThickness: 3,
+            align: 'center',
+        }).setOrigin(0.5).setAlpha(0);
+
+        this.tweens.add({ targets: warnTxt, alpha: 1, duration: 300, delay: 150 });
+        this.tweens.add({ targets: bossTxt, alpha: 1, scaleX: 1, scaleY: 1, duration: 400, delay: 400, ease: 'Back.Out' });
+        this.tweens.add({ targets: subTxt,  alpha: 1, duration: 300, delay: 900 });
+
+        // Shake the camera
+        this.time.delayedCall(200, () => this._screenShake(12, 500));
+
+        // Clear intro and begin
+        this.time.delayedCall(2600, () => {
+            [warnTxt, bossTxt, subTxt].forEach(t => {
+                this.tweens.add({ targets: t, alpha: 0, duration: 300,
+                    onComplete: () => t.destroy() });
+            });
+            this.time.delayedCall(320, () => this._showRoundSplash());
+        });
+    }
+
     _endGame(winner) {
         this._gameOver = true;
         const W = this.scale.width;
         const H = this.scale.height;
+
+        // ── If player won: increment the defeat counter ───────
+        if (winner === 'player') {
+            window._defeatedCount = (window._defeatedCount || 0) + 1;
+            // Cap at 10 (after 10 victories, loop back to 0 to restart the cycle)
+            if (window._defeatedCount > 10) window._defeatedCount = 0;
+        }
+        const newCount = window._defeatedCount || 0;
+        const justBeatBoss = winner === 'player' && this._defeatedCount >= 9;
 
         const overlay = this.add.graphics();
         overlay.fillStyle(0x000000, 0.78);
@@ -1390,16 +1499,29 @@ class FightScene extends Phaser.Scene {
         this.tweens.add({ targets: overlay, alpha: 1, duration: 350 });
 
         const isPlayerWin = winner === 'player';
-        const headline = isPlayerWin ? '🏆 VICTORY!' : '💀 DEFEATED!';
-        const sub      = isPlayerWin
+
+        // Special headline for boss victory
+        let headline, headColor;
+        if (justBeatBoss) {
+            headline  = '⚡ BOSS DEFEATED! ⚡';
+            headColor = '#FF6600';
+        } else if (isPlayerWin) {
+            headline  = '🏆 VICTORY!';
+            headColor = '#FFD700';
+        } else {
+            headline  = '💀 DEFEATED!';
+            headColor = '#FF4444';
+        }
+
+        const sub = isPlayerWin
             ? `You won  ${this._playerWins} - ${this._enemyWins}`
             : `Enemy won  ${this._enemyWins} - ${this._playerWins}`;
 
         const headTxt = this.add.text(W / 2, H / 2 - 70, headline, {
-            fontSize: '50px',
+            fontSize: '46px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
-            color: isPlayerWin ? '#FFD700' : '#FF4444',
+            color: headColor,
             stroke: '#000000',
             strokeThickness: 6,
         }).setOrigin(0.5).setScale(2).setAlpha(0);
@@ -1414,9 +1536,26 @@ class FightScene extends Phaser.Scene {
             strokeThickness: 2,
         }).setOrigin(0.5).setAlpha(0.9);
 
+        // Progress line (fight N/10 or "All enemies conquered!")
+        if (isPlayerWin) {
+            // newCount is already incremented; for the next fight it represents the new dc
+            const nextFightDisplay = justBeatBoss ? 1 : Math.min(newCount + 1, 10);
+            const progText = justBeatBoss
+                ? '🏆 You conquered all 10 enemies!'
+                : `Next: Fight ${nextFightDisplay} / 10  ▶  Enemy is STRONGER`;
+            const progColor = justBeatBoss ? '#FFD700' : '#FF8800';
+            this.add.text(W / 2, H / 2 + 18, progText, {
+                fontSize: '13px',
+                fontFamily: 'Arial Black, Arial',
+                color: progColor,
+                stroke: '#000000',
+                strokeThickness: 2,
+            }).setOrigin(0.5).setAlpha(0.95);
+        }
+
         // Share link
         const shareUrl = this._buildShareUrl();
-        const shareTxt = this.add.text(W / 2, H / 2 + 40,
+        const shareTxt = this.add.text(W / 2, H / 2 + 52,
             '🔗 Copy shareable link', {
             fontSize: '15px', fontFamily: 'Arial', color: '#88DDFF',
             backgroundColor: '#0a1830',
@@ -1430,8 +1569,12 @@ class FightScene extends Phaser.Scene {
             this.time.delayedCall(2000, () => shareTxt.setText('🔗 Copy shareable link'));
         });
 
-        // Rematch
-        const rematch = this.add.text(W / 2, H / 2 + 94, '⚔️  REMATCH', {
+        // Rematch / Next Fight button
+        const nextFightNum = isPlayerWin ? Math.min(newCount + 1, 10) : (this._defeatedCount + 1);
+        const rematchLabel = isPlayerWin
+            ? (justBeatBoss ? '🔄  PLAY AGAIN' : `⚔️  FIGHT ${nextFightNum} →`)
+            : '⚔️  REMATCH';
+        const rematch = this.add.text(W / 2, H / 2 + 106, rematchLabel, {
             fontSize: '20px',
             fontFamily: 'Arial Black, Arial',
             color: '#FF6B35',
@@ -1441,6 +1584,8 @@ class FightScene extends Phaser.Scene {
         rematch.on('pointerover', () => rematch.setColor('#FFD700'));
         rematch.on('pointerout',  () => rematch.setColor('#FF6B35'));
         rematch.on('pointerdown', () => {
+            // After boss victory, reset counter so it loops
+            if (justBeatBoss) window._defeatedCount = 0;
             this._gameOver    = false;
             this._round       = 1;
             this._playerWins  = 0;

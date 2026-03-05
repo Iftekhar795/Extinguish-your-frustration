@@ -41,9 +41,15 @@ class Fighter {
         this.faceDataUrl = config.faceDataUrl || null;
         this.name        = config.name        || 'Fighter';
 
+        // Visual scale (1.0 = normal; >1.0 = bigger — used for boss enemies)
+        this._drawScale = config.drawScale || 1.0;
+
+        // Boss flag – triggers special rendering effects
+        this.isBoss = config.isBoss || false;
+
         // Combat stats
-        this.maxHp = 100;
-        this.hp    = 100;
+        this.maxHp = config.maxHp || 100;
+        this.hp    = this.maxHp;
 
         // Super meter (SF-style gauge – fills from dealing/receiving damage)
         this._superMeter    = 0;
@@ -118,13 +124,14 @@ class Fighter {
 
     /** @returns {{x:number,y:number,w:number,h:number}} */
     getBodyHitbox() {
+        const sc = this._drawScale;
         const crouching = this.state === 'crouching' || this.state === 'crouchPunch' || this.state === 'crouchKick';
         const heightMul = crouching ? 0.60 : 1;
         return {
-            x: this.x - Fighter.WIDTH / 2,
-            y: this.y - Fighter.HEIGHT * heightMul,
-            w: Fighter.WIDTH,
-            h: Fighter.HEIGHT * heightMul,
+            x: this.x - (Fighter.WIDTH  * sc) / 2,
+            y: this.y - Fighter.HEIGHT  * heightMul * sc,
+            w: Fighter.WIDTH  * sc,
+            h: Fighter.HEIGHT * heightMul * sc,
         };
     }
 
@@ -139,30 +146,31 @@ class Fighter {
         if (elapsed < winStart || elapsed > winEnd) return null;
 
         const dir = this.facingRight ? 1 : -1;
+        const sc  = this._drawScale;
 
         // Shoryuken has a tall upward hitbox
         if (this.state === 'shoryuken') {
             return {
-                x: this.x - Fighter.WIDTH / 2 + dir * 4,
-                y: this.y - Fighter.HEIGHT * 1.8,
-                w: Fighter.WIDTH + attack.range,
-                h: Fighter.HEIGHT * 1.3,
+                x: this.x - (Fighter.WIDTH * sc) / 2 + dir * 4,
+                y: this.y - Fighter.HEIGHT * 1.8 * sc,
+                w: Fighter.WIDTH * sc + attack.range,
+                h: Fighter.HEIGHT * 1.3 * sc,
             };
         }
 
         // Crouching attacks hit low; jump attacks travel with the fighter; normal attacks hit mid
         const isCrouch = this.state === 'crouchPunch' || this.state === 'crouchKick';
         const hitY  = isCrouch
-            ? this.y - Fighter.HEIGHT * 0.30
-            : this.y - Fighter.HEIGHT * 0.65;
+            ? this.y - Fighter.HEIGHT * 0.30 * sc
+            : this.y - Fighter.HEIGHT * 0.65 * sc;
         const hitH  = isCrouch
-            ? Fighter.HEIGHT * 0.30
-            : Fighter.HEIGHT * 0.50;
+            ? Fighter.HEIGHT * 0.30 * sc
+            : Fighter.HEIGHT * 0.50 * sc;
 
         return {
-            x: this.x + dir * (Fighter.WIDTH / 2),
+            x: this.x + dir * (Fighter.WIDTH / 2 * sc),
             y: hitY,
-            w: attack.range,
+            w: attack.range * sc,
             h: hitH,
         };
     }
@@ -670,14 +678,33 @@ class Fighter {
         }
 
         // ── Layout ───────────────────────────────────────────
-        const legW  = 14;
-        const legH  = 34;
-        const torsoH = 44;
+        const sc     = this._drawScale;   // visual scale factor (boss = >1)
+        const legW   = 14 * sc;
+        const legH   = 34 * sc;
+        const torsoH = 44 * sc;
+        const headR  = Fighter.HEAD_RADIUS * sc;
 
-        const drawY   = y + crouchOffset;
+        const drawY   = y + crouchOffset * sc;
         const hipY    = drawY - legH;
         const torsoY  = hipY - torsoH;
-        const torsoX  = x + bodyLeanX;
+        const torsoX  = x + bodyLeanX * sc;
+
+        // ── Boss aura (drawn behind everything) ───────────────
+        if (this.isBoss) {
+            const pulse = Math.sin(now / 80) * 0.10 + 0.22;
+            g.fillStyle(0xFF2200, pulse);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.80);
+            // Flame spikes
+            for (let fi = 0; fi < 6; fi++) {
+                const fa = (now / 500 + fi * Math.PI / 3);
+                const fr = Fighter.HEIGHT * sc * (0.55 + Math.sin(now / 120 + fi) * 0.12);
+                g.fillStyle(0xFF6600, 0.18);
+                g.fillCircle(x + Math.cos(fa) * fr * 0.7, (y - Fighter.HEIGHT * sc * 0.5) + Math.sin(fa) * fr * 0.4, 10 * sc);
+            }
+            // Dark inner shadow to separate from aura
+            g.fillStyle(0x000000, 0.20);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.40);
+        }
 
         // ── Legs ─────────────────────────────────────────────
         const legColor  = flashing ? 0xff3333 : this.pantsColor;
@@ -686,13 +713,13 @@ class Fighter {
         const pantsGreen = ((this.pantsColor >>  8) & 0xff) * 0.55 | 0;
         const pantsBlue  = (this.pantsColor         & 0xff) * 0.55 | 0;
         const bootColor = flashing ? 0xff3333 : ((pantsRed << 16) | (pantsGreen << 8) | pantsBlue);
-        this._drawLeg(g, x - 8, hipY, legW, legH, leftLegAngle,  legColor, bootColor);
-        this._drawLeg(g, x + 8, hipY, legW, legH, rightLegAngle, legColor, bootColor);
+        this._drawLeg(g, x - 8 * sc, hipY, legW, legH, leftLegAngle,  legColor, bootColor);
+        this._drawLeg(g, x + 8 * sc, hipY, legW, legH, rightLegAngle, legColor, bootColor);
 
         // ── Torso ─────────────────────────────────────────────
         const torsoColor = flashing ? 0xff3333 : this.bodyColor;
-        const shW = 20;   // half-width at shoulders (top)
-        const waW = 14;   // half-width at waist (bottom)
+        const shW = 20 * sc;   // half-width at shoulders (top)
+        const waW = 14 * sc;   // half-width at waist (bottom)
 
         // Drop shadow (offset 2 px down-right)
         g.fillStyle(0x000000, 0.22);
@@ -779,31 +806,32 @@ class Fighter {
         if (this._superMeter >= this._superMeterMax && this.state !== 'shoryuken') {
             const pulse = Math.sin(now / 90) * 0.08 + 0.12;
             g.fillStyle(0xFFD700, pulse);
-            g.fillCircle(x, y - Fighter.HEIGHT * 0.5, Fighter.HEIGHT * 0.68);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.68);
             // Orbiting sparks
             for (let i = 0; i < 4; i++) {
                 const angle = now / 320 + i * Math.PI / 2;
-                const sx = x  + Math.cos(angle) * 30;
-                const sy = (y - Fighter.HEIGHT * 0.5) + Math.sin(angle) * 18;
+                const sx = x  + Math.cos(angle) * 30 * sc;
+                const sy = (y - Fighter.HEIGHT * sc * 0.5) + Math.sin(angle) * 18 * sc;
                 g.fillStyle(0xFFFF44, 0.65);
-                g.fillCircle(sx, sy, 3.5);
+                g.fillCircle(sx, sy, 3.5 * sc);
             }
         }
 
         // ── Arms ─────────────────────────────────────────────
-        const armColor = flashing ? 0xff3333 : this.skinColor;
-        const armW     = 12;
-        const armH     = 30;
-        const shoulderY = torsoY + 4;
+        const armColor  = flashing ? 0xff3333 : this.skinColor;
+        const armW      = 12 * sc;
+        const armH      = 30 * sc;
+        const shoulderY = torsoY + 4 * sc;
+        const shldrOff  = 18 * sc;  // lateral shoulder offset from torso centre
 
         // Shoulder caps (drawn behind arms so arms appear to come out of them)
         g.fillStyle(flashing ? 0xff3333 : this.bodyColor, 1);
-        g.fillCircle(torsoX - 18, shoulderY, 10);
-        g.fillCircle(torsoX + 18, shoulderY, 10);
+        g.fillCircle(torsoX - shldrOff, shoulderY, 10 * sc);
+        g.fillCircle(torsoX + shldrOff, shoulderY, 10 * sc);
         // Darker dimple for depth
         g.fillStyle(0x000000, 0.22);
-        g.fillCircle(torsoX - 18, shoulderY + 3, 5);
-        g.fillCircle(torsoX + 18, shoulderY + 3, 5);
+        g.fillCircle(torsoX - shldrOff, shoulderY + 3 * sc, 5 * sc);
+        g.fillCircle(torsoX + shldrOff, shoulderY + 3 * sc, 5 * sc);
 
         // ── Punch motion trail (ghost arms) ──────────────────
         if (this.state === 'punch' && (this._punchDriveS || 0) > 0.18) {
@@ -813,20 +841,19 @@ class Fighter {
                 const trailAlpha = (0.18 - t * 0.04) * trailS;
                 if (trailAlpha <= 0) break;
                 g.fillStyle(0xffffff, trailAlpha);
-                // Simplified arm as rectangle in the trail
-                const trailEndX = torsoX + dir * 18 + Math.sin(trailAngle) * armH;
+                const trailEndX = torsoX + dir * shldrOff + Math.sin(trailAngle) * armH;
                 const trailEndY = shoulderY + Math.cos(trailAngle) * armH;
                 g.beginPath();
-                g.moveTo(torsoX + dir * (18 - armW / 2), shoulderY);
-                g.lineTo(torsoX + dir * (18 + armW / 2), shoulderY);
+                g.moveTo(torsoX + dir * (shldrOff - armW / 2), shoulderY);
+                g.lineTo(torsoX + dir * (shldrOff + armW / 2), shoulderY);
                 g.lineTo(trailEndX + dir * armW / 2, trailEndY);
                 g.lineTo(trailEndX - dir * armW / 2, trailEndY);
                 g.closePath(); g.fillPath();
             }
         }
 
-        this._drawArm(g, torsoX - 18, shoulderY, armW, armH, leftArmAngle,  armColor);
-        this._drawArm(g, torsoX + 18, shoulderY, armW, armH, rightArmAngle, armColor);
+        this._drawArm(g, torsoX - shldrOff, shoulderY, armW, armH, leftArmAngle,  armColor);
+        this._drawArm(g, torsoX + shldrOff, shoulderY, armW, armH, rightArmAngle, armColor);
 
         // Fist knuckle at tip of front arm during attacks
         const showFist = (this.state === 'punch'       && punchProg       > 0.22 && punchProg       < 0.88)
@@ -834,13 +861,13 @@ class Fighter {
                       || (this.state === 'jumpPunch'   && jumpPunchProg   > 0.28 && jumpPunchProg   < 0.88)
                       || (this.state === 'shoryuken'   && shoryukenProg   > 0.15 && shoryukenProg   < 0.75);
         if (showFist) {
-            const fistX = torsoX + dir * (18 + Math.sin(rightArmAngle) * armH);
+            const fistX = torsoX + dir * (shldrOff + Math.sin(rightArmAngle) * armH);
             const fistY = shoulderY + Math.cos(rightArmAngle) * armH;
             const fistColor = this.state === 'shoryuken'
                 ? (flashing ? 0xff3333 : 0xFFAA00)
                 : (flashing ? 0xff3333 : this.skinColor);
             g.fillStyle(fistColor, 1);
-            g.fillCircle(fistX, fistY, this.state === 'shoryuken' ? 10 : 9);
+            g.fillCircle(fistX, fistY, (this.state === 'shoryuken' ? 10 : 9) * sc);
             // Knuckle wraps (dark stripes over the fist)
             if (this.state !== 'shoryuken') {
                 g.fillStyle(0x000000, 0.30);
@@ -851,7 +878,7 @@ class Fighter {
             // Impact spark on peak drive
             const driveS = this._punchDriveS || 0;
             if (driveS > 0.55 && driveS < 0.78) {
-                const sparkSize = (driveS - 0.55) / 0.23 * 12;
+                const sparkSize = (driveS - 0.55) / 0.23 * 12 * sc;
                 g.fillStyle(0xFFFFAA, 0.55);
                 g.fillCircle(fistX + dir * sparkSize, fistY, sparkSize * 0.7);
                 g.fillStyle(0xFFDD44, 0.80);
@@ -859,8 +886,8 @@ class Fighter {
             }
             if (this.state === 'shoryuken') {
                 // Extra energy ring on fist
-                g.lineStyle(2, 0xFFFF00, 0.7);
-                g.strokeCircle(fistX, fistY, 14);
+                g.lineStyle(2 * sc, 0xFFFF00, 0.7);
+                g.strokeCircle(fistX, fistY, 14 * sc);
             }
         }
 
@@ -869,28 +896,29 @@ class Fighter {
                       || (this.state === 'crouchKick' && crouchKickProg > 0.28 && crouchKickProg < 0.88)
                       || (this.state === 'jumpKick'   && jumpKickProg   > 0.25 && jumpKickProg   < 0.90);
         if (showBoot) {
-            const bootX = x + 8 + Math.sin(rightLegAngle) * legH;
+            const bootX = x + 8 * sc + Math.sin(rightLegAngle) * legH;
             const bootY = hipY  + Math.cos(rightLegAngle) * legH;
             g.fillStyle(flashing ? 0xff3333 : this.pantsColor, 1);
-            g.fillCircle(bootX, bootY, 9);
+            g.fillCircle(bootX, bootY, 9 * sc);
         }
 
         // ── Blocking shield ──────────────────────────────────
         if (this.state === 'blocking') {
-            this._drawShield(g, torsoX, torsoY, torsoH, dir, flashing);
+            this._drawShield(g, torsoX, torsoY, torsoH, dir, flashing, sc);
         }
 
         // ── Head ─────────────────────────────────────────────
-        const headCX = torsoX + headOffX;
-        const headCY = torsoY - Fighter.HEAD_RADIUS - 2 + headOffY;
+        const headCX = torsoX + headOffX * sc;
+        const headCY = torsoY - headR - 2 * sc + headOffY * sc;
 
         // Neck connecting head to torso
         const neckColor = flashing ? 0xff3333 : this.skinColor;
         g.fillStyle(neckColor, 1);
-        g.fillRoundedRect(headCX - 5, torsoY - 11, 10, 13, 2);
+        g.fillRoundedRect(headCX - 5 * sc, torsoY - 11 * sc, 10 * sc, 13 * sc, 2);
 
         if (this.faceImage) {
             this.faceImage.setPosition(headCX, headCY);
+            this.faceImage.setScale(sc);
             this.faceImage.setAlpha(alpha);
             this.faceImage.setFlipX(!this.facingRight);
             if (flashing) {
@@ -904,52 +932,52 @@ class Fighter {
 
             // Shadow
             g.fillStyle(0x000000, 0.18);
-            g.fillCircle(headCX + 2, headCY + 2, Fighter.HEAD_RADIUS);
+            g.fillCircle(headCX + 2, headCY + 2, headR);
 
             g.fillStyle(headColor, 1);
-            g.fillCircle(headCX, headCY, Fighter.HEAD_RADIUS);
+            g.fillCircle(headCX, headCY, headR);
 
             // Highlight
             g.fillStyle(0xffffff, 0.14);
-            g.fillCircle(headCX - 6, headCY - 6, Fighter.HEAD_RADIUS * 0.55);
+            g.fillCircle(headCX - 6 * sc, headCY - 6 * sc, headR * 0.55);
 
             // Headband / hair tuft on top
             if (!flashing) {
                 // Dark hair
                 g.fillStyle(0x1a0a00, 0.85);
-                g.fillEllipse(headCX, headCY - Fighter.HEAD_RADIUS * 0.60,
-                    Fighter.HEAD_RADIUS * 1.55, Fighter.HEAD_RADIUS * 0.65);
-                // Coloured headband stripe
-                g.fillStyle(this.bodyColor, 0.90);
-                g.fillRect(headCX - Fighter.HEAD_RADIUS * 0.80,
-                           headCY - Fighter.HEAD_RADIUS * 0.30,
-                           Fighter.HEAD_RADIUS * 1.60, 5);
+                g.fillEllipse(headCX, headCY - headR * 0.60,
+                    headR * 1.55, headR * 0.65);
+                // Coloured headband stripe (boss gets red headband)
+                g.fillStyle(this.isBoss ? 0xFF2200 : this.bodyColor, 0.90);
+                g.fillRect(headCX - headR * 0.80,
+                           headCY - headR * 0.30,
+                           headR * 1.60, 5 * sc);
             }
 
             // Eyes
             const eyeColor = (this.state === 'hit' || this.state === 'ko') ? 0x555555 : 0x000000;
             g.fillStyle(eyeColor, 0.75);
-            g.fillCircle(headCX - 7, headCY - 4, 3.5);
-            g.fillCircle(headCX + 7, headCY - 4, 3.5);
-            // Eye whites / pupils
+            g.fillCircle(headCX - 7 * sc, headCY - 4 * sc, 3.5 * sc);
+            g.fillCircle(headCX + 7 * sc, headCY - 4 * sc, 3.5 * sc);
+            // Eye whites / pupils (boss gets glowing red eyes)
             if (this.state !== 'hit' && this.state !== 'ko') {
-                g.fillStyle(0xffffff, 0.65);
-                g.fillCircle(headCX - 7 + dir, headCY - 5, 1.5);
-                g.fillCircle(headCX + 7 + dir, headCY - 5, 1.5);
+                g.fillStyle(this.isBoss ? 0xFF3300 : 0xffffff, 0.70);
+                g.fillCircle(headCX - 7 * sc + dir, headCY - 5 * sc, 1.5 * sc);
+                g.fillCircle(headCX + 7 * sc + dir, headCY - 5 * sc, 1.5 * sc);
             }
 
             // Expression mouth
-            g.lineStyle(2, 0x000000, 0.65);
+            g.lineStyle(2 * sc, 0x000000, 0.65);
             g.beginPath();
             if (this.state === 'hit' || this.state === 'ko') {
                 // Grimace
-                g.arc(headCX, headCY + 9, 7, Math.PI, 0);
+                g.arc(headCX, headCY + 9 * sc, 7 * sc, Math.PI, 0);
             } else if (['punch','kick','crouchPunch','crouchKick','jumpPunch','jumpKick','special','shoryuken'].includes(this.state)) {
                 // Fierce war cry
-                g.arc(headCX, headCY + 3, 9, 0.15, Math.PI - 0.15);
+                g.arc(headCX, headCY + 3 * sc, 9 * sc, 0.15, Math.PI - 0.15);
             } else {
                 // Focused guard
-                g.arc(headCX, headCY + 6, 7, 0.1, Math.PI - 0.1);
+                g.arc(headCX, headCY + 6 * sc, 7 * sc, 0.1, Math.PI - 0.1);
             }
             g.strokePath();
         }
@@ -979,12 +1007,12 @@ class Fighter {
     }
 
     /** Draw a kite shield held in front of the fighter while blocking */
-    _drawShield(g, torsoX, torsoY, torsoH, dir, flashing) {
+    _drawShield(g, torsoX, torsoY, torsoH, dir, flashing, sc = 1) {
         // Shield is held on the forward arm side, in front of the body
-        const shieldCX = torsoX + dir * 28;
+        const shieldCX = torsoX + dir * 28 * sc;
         const shieldCY = torsoY + torsoH * 0.28;
-        const shW      = 16;   // half-width of shield
-        const shH      = 30;   // half-height of shield
+        const shW      = 16 * sc;   // half-width of shield
+        const shH      = 30 * sc;   // half-height of shield
 
         // Drop shadow
         g.fillStyle(0x000000, 0.30);
@@ -1006,7 +1034,7 @@ class Fighter {
         g.closePath(); g.fillPath();
 
         // Rim / border
-        g.lineStyle(3, flashing ? 0xff9999 : 0x8a8aaa, 1);
+        g.lineStyle(3 * sc, flashing ? 0xff9999 : 0x8a8aaa, 1);
         g.beginPath();
         g.moveTo(shieldCX, shieldCY - shH);
         g.lineTo(shieldCX + dir * shW, shieldCY);
@@ -1015,7 +1043,7 @@ class Fighter {
         g.closePath(); g.strokePath();
 
         // Horizontal cross-bar
-        g.lineStyle(2, flashing ? 0xff9999 : 0x7a7a9a, 0.75);
+        g.lineStyle(2 * sc, flashing ? 0xff9999 : 0x7a7a9a, 0.75);
         g.beginPath();
         g.moveTo(shieldCX - dir * shW + 2, shieldCY);
         g.lineTo(shieldCX + dir * shW - 2, shieldCY);
@@ -1023,9 +1051,9 @@ class Fighter {
 
         // Central boss (rounded knob)
         g.fillStyle(flashing ? 0xff9999 : 0xAAAAAA, 1);
-        g.fillCircle(shieldCX, shieldCY, 5);
+        g.fillCircle(shieldCX, shieldCY, 5 * sc);
         g.fillStyle(0xffffff, 0.35);
-        g.fillCircle(shieldCX - 1, shieldCY - 1, 2);
+        g.fillCircle(shieldCX - 1, shieldCY - 1, 2 * sc);
 
         // Shield surface shading (lighter left half)
         g.fillStyle(0xffffff, 0.08);

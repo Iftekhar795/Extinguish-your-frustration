@@ -25,16 +25,25 @@ class EnemyAI extends Fighter {
         this._playerHistory = [];
         this._maxHistory    = 8;
 
-        // Difficulty (0 = easy, 1 = normal, 2 = hard)
-        this.difficulty  = config.difficulty !== undefined ? config.difficulty : 1;
+        // Difficulty (0 = easy, 1 = normal, 2 = hard) + defeat scaling
+        this.difficulty     = config.difficulty    !== undefined ? config.difficulty    : 1;
+        this._defeatedCount = config.defeatedCount !== undefined ? config.defeatedCount : 0;
 
-        // Per-difficulty tuning
-        const tuning = [
-            { reactionTime: 700, blockChance: 0.15, aggression: 0.4 },  // easy
-            { reactionTime: 450, blockChance: 0.35, aggression: 0.65 }, // normal
-            { reactionTime: 250, blockChance: 0.55, aggression: 0.85 }, // hard
-        ];
-        this._t = tuning[this.difficulty];
+        // Per-difficulty base tuning, then scaled by defeatedCount
+        const base = [
+            { reactionTime: 700, blockChance: 0.15, aggression: 0.40 },  // easy
+            { reactionTime: 450, blockChance: 0.35, aggression: 0.65 },  // normal
+            { reactionTime: 250, blockChance: 0.55, aggression: 0.85 },  // hard
+        ][this.difficulty];
+
+        // Each defeat tightens reaction, raises block chance and aggression.
+        // Use proportional reduction so scaling stays linear across all 9 defeats.
+        const n = Math.min(this._defeatedCount, 9);
+        this._t = {
+            reactionTime: Math.round(base.reactionTime - n * Math.floor((base.reactionTime - 80) / 9)),
+            blockChance:  Math.min(0.92, base.blockChance  + n * 0.07),
+            aggression:   Math.min(0.98, base.aggression   + n * 0.04),
+        };
     }
 
     /** Provide a reference to the player fighter each frame */
@@ -125,8 +134,12 @@ class EnemyAI extends Fighter {
     }
 
     _chooseAttack(dist) {
+        const isBossFight = this._defeatedCount >= 9;
+
         // Use Shoryuken when super meter is full and player is in range
-        if (this._superMeter >= this._superMeterMax && dist < 130) {
+        // Boss uses it at a lower meter threshold
+        const shoryukenThreshold = isBossFight ? 60 : this._superMeterMax;
+        if (this._superMeter >= shoryukenThreshold && dist < 130) {
             this.shoryuken();
             return;
         }
@@ -140,7 +153,11 @@ class EnemyAI extends Fighter {
 
         const roll = Math.random();
 
-        if (dist > 90 && roll < 0.25 && this._specialCharge > 60) {
+        // Boss fires projectiles more aggressively
+        const specialThreshold = isBossFight ? 0.38 : 0.25;
+        const specialChargeReq = isBossFight ? 30    : 60;
+
+        if (dist > 90 && roll < specialThreshold && this._specialCharge > specialChargeReq) {
             this.special();
         } else if (roll < kickBias) {
             this.kick();
