@@ -115,6 +115,11 @@ class FightScene extends Phaser.Scene {
         this.enemy  = new EnemyAI(this, enemyCfg);
         this.enemy.setPlayer(this.player);
 
+        // ── Projectile system ─────────────────────────────────
+        this._projectiles = [];
+        this.player._onProjectileFire = () => this._spawnProjectile(this.player);
+        this.enemy._onProjectileFire  = () => this._spawnProjectile(this.enemy);
+
         this._groundY = groundY;
 
         // ── UI ───────────────────────────────────────────────
@@ -145,6 +150,9 @@ class FightScene extends Phaser.Scene {
         // Fighters face each other
         this.player.facingRight = this.player.x < this.enemy.x;
         this.enemy.facingRight  = this.enemy.x  < this.player.x;
+
+        // ── projectiles ──────────────────────────────────────
+        this._updateProjectiles(delta);
 
         // ── collision / combat ───────────────────────────────
         this._resolveCombat();
@@ -441,6 +449,7 @@ class FightScene extends Phaser.Scene {
             left:    kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
             right:   kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
             up:      kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
+            down:    kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
             punch:   kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
             kick:    kb.addKey(Phaser.Input.Keyboard.KeyCodes.X),
             block:   kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
@@ -453,12 +462,19 @@ class FightScene extends Phaser.Scene {
         const mi = window._mobileInput || {};
         const p  = this.player;
 
-        // Movement (keyboard OR mobile d-pad)
-        const goLeft  = (k.left.isDown  && !k.right.isDown) || (mi.left  && !mi.right);
-        const goRight = (k.right.isDown && !k.left.isDown)  || (mi.right && !mi.left);
-        if      (goLeft)  p.move(-1);
-        else if (goRight) p.move(1);
-        else              p.move(0);
+        // Crouch (down key – cannot move while crouching)
+        const wantCrouch = k.down.isDown || !!mi.down;
+        if (wantCrouch) {
+            p.crouch();
+        } else {
+            p.standUp();
+            // Movement (keyboard OR mobile d-pad) – only when not crouching
+            const goLeft  = (k.left.isDown  && !k.right.isDown) || (mi.left  && !mi.right);
+            const goRight = (k.right.isDown && !k.left.isDown)  || (mi.right && !mi.left);
+            if      (goLeft)  p.move(-1);
+            else if (goRight) p.move(1);
+            else              p.move(0);
+        }
 
         // Jump
         if (Phaser.Input.Keyboard.JustDown(k.up) || mi.jumpJustDown) {
@@ -468,8 +484,10 @@ class FightScene extends Phaser.Scene {
             mi.jumpJustDown = false;
         }
 
-        // Block
-        p.setBlocking(k.block.isDown || !!mi.block);
+        // Block (only when not crouching)
+        if (!wantCrouch) {
+            p.setBlocking(k.block.isDown || !!mi.block);
+        }
 
         // Punch (just pressed)
         if (Phaser.Input.Keyboard.JustDown(k.punch) || mi.punchJustDown) {
@@ -491,7 +509,7 @@ class FightScene extends Phaser.Scene {
             mi.kickJustDown = false;
         }
 
-        // Special (charge while held, release to fire)
+        // Special (charge while held, release to fire Hadouken)
         if (k.special.isDown || mi.specialDown) {
             p.chargeSpecial(delta);
         }
@@ -520,6 +538,80 @@ class FightScene extends Phaser.Scene {
         this._comboText.setAlpha(1);
     }
 
+    // ── projectile system (Hadouken) ──────────────────────────
+
+    _spawnProjectile(owner) {
+        const dir    = owner.facingRight ? 1 : -1;
+        const startX = owner.x + dir * 28;
+        const startY = owner.y - Fighter.HEIGHT * 0.55;
+
+        const proj = {
+            x:     startX,
+            y:     startY,
+            velX:  dir * 400,
+            owner,
+            g:     this.add.graphics(),
+            life:  2800,
+            hit:   false,
+        };
+        this._projectiles.push(proj);
+    }
+
+    _updateProjectiles(delta) {
+        const W = this.scale.width;
+        for (let i = this._projectiles.length - 1; i >= 0; i--) {
+            const proj = this._projectiles[i];
+            proj.x    += proj.velX * (delta / 1000);
+            proj.life -= delta;
+
+            // Remove if off-screen or expired
+            if (proj.hit || proj.x < -20 || proj.x > W + 20 || proj.life <= 0) {
+                proj.g.destroy();
+                this._projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Draw Hadouken fireball
+            const t   = Date.now();
+            const g   = proj.g;
+            g.clear();
+            // Outer halo / wave rings
+            g.fillStyle(0x0033FF, 0.12);
+            g.fillCircle(proj.x, proj.y, 28 + Math.sin(t / 70) * 5);
+            // Mid glow
+            g.fillStyle(0x0088FF, 0.30);
+            g.fillCircle(proj.x, proj.y, 18 + Math.sin(t / 55) * 3);
+            // Core
+            g.fillStyle(0x00CCFF, 0.85);
+            g.fillCircle(proj.x, proj.y, 11 + Math.sin(t / 45) * 2);
+            // Inner bright spot
+            g.fillStyle(0xffffff, 0.70);
+            g.fillCircle(proj.x - 4, proj.y - 4, 5);
+
+            // Check collision with target fighter
+            const target = proj.owner === this.player ? this.enemy : this.player;
+            const hitbox = target.getBodyHitbox();
+            if (proj.x + 14 > hitbox.x && proj.x - 14 < hitbox.x + hitbox.w &&
+                proj.y + 14 > hitbox.y && proj.y - 14 < hitbox.y + hitbox.h) {
+                const dmg = 25;
+                if (target.isBlocking) {
+                    soundManager.playBlock();
+                    target.receiveHit(Math.floor(dmg * 0.2));
+                } else {
+                    soundManager.playSpecialRelease
+                        ? soundManager.playEnemyHitVoice()
+                        : null;
+                    target.receiveHit(dmg);
+                    this._spawnHitEffect(proj.x, proj.y, proj.owner === this.enemy);
+                    if (target.isKO()) {
+                        this.time.delayedCall(120, () => soundManager.playKO());
+                    }
+                }
+                proj.hit = true;
+            }
+        }
+    }
+
     // ── combat resolution ─────────────────────────────────────
 
     _resolveCombat() {
@@ -529,7 +621,7 @@ class FightScene extends Phaser.Scene {
             if (this._hitboxOverlap(pAtk, this.enemy.getBodyHitbox())) {
                 const state  = this.player.state;
                 const attack = this.player._attacks[state];
-                if (attack) {
+                if (attack && attack.damage > 0) {
                     const dmg = attack.damage;
                     if (this.enemy.isBlocking) {
                         soundManager.playBlock();
@@ -552,7 +644,7 @@ class FightScene extends Phaser.Scene {
             if (this._hitboxOverlap(eAtk, this.player.getBodyHitbox())) {
                 const state  = this.enemy.state;
                 const attack = this.enemy._attacks[state];
-                if (attack) {
+                if (attack && attack.damage > 0) {
                     const dmg = attack.damage;
                     if (this.player.isBlocking) {
                         soundManager.playBlock();
