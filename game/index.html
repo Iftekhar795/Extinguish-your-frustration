@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Fighter – Upload Your Face, Enter the Arena!</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Phaser 3 (local bundle, CDN fallback) -->
+    <script src="phaser.min.js"></script>
+    <script>
+        if (typeof Phaser === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"><\/script>');
+        }
+    </script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     LOBBY OVERLAY  – shown before and between fights
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="lobby-overlay">
+    <div class="lobby-box">
+
+        <h1>👊 FACE FIGHTER</h1>
+        <p class="tagline">Upload your face — enter the arena!</p>
+
+        <!-- Shared-config notice (hidden until a #config= link is detected) -->
+        <div id="share-notice" class="notice" style="display:none;">
+            🔗 Loaded a shared fighter configuration!
+        </div>
+
+        <!-- ── Fighters ── -->
+        <div class="fighters-row">
+
+            <!-- Player -->
+            <div class="fighter-card">
+                <h2>🥊 YOUR FIGHTER</h2>
+                <div class="face-upload-area" id="player-upload-area" tabindex="0"
+                     title="Click to upload your face photo">
+                    <img id="player-face-preview" src="" alt="" style="display:none;">
+                    <div id="player-upload-placeholder" class="upload-placeholder">
+                        <span class="upload-icon">📷</span>
+                        <p>Click to upload<br>your face photo</p>
+                    </div>
+                    <input type="file" id="player-face-input" accept="image/*" tabindex="-1">
+                </div>
+                <label class="color-label">
+                    Fighter Colour
+                    <input type="color" id="player-color" value="#2255cc">
+                </label>
+            </div>
+
+            <div class="vs-badge">VS</div>
+
+            <!-- Enemy -->
+            <div class="fighter-card">
+                <h2>💀 ENEMY</h2>
+                <div class="face-upload-area" id="enemy-upload-area" tabindex="0"
+                     title="Click to upload an enemy face (optional)">
+                    <img id="enemy-face-preview" src="" alt="" style="display:none;">
+                    <div id="enemy-upload-placeholder" class="upload-placeholder">
+                        <span class="upload-icon">😤</span>
+                        <p>Click to upload<br>enemy face (optional)</p>
+                    </div>
+                    <input type="file" id="enemy-face-input" accept="image/*" tabindex="-1">
+                </div>
+                <label class="color-label">
+                    Enemy Colour
+                    <input type="color" id="enemy-color" value="#cc2222">
+                </label>
+            </div>
+
+        </div><!-- /.fighters-row -->
+
+        <!-- ── Settings ── -->
+        <div class="settings-row">
+            <label class="setting">
+                🏟 Arena
+                <select id="arena-select">
+                    <option value="0">🌤 City Street</option>
+                    <option value="1">🌑 Night Club</option>
+                    <option value="2">☀️ Desert Temple</option>
+                </select>
+            </label>
+            <label class="setting">
+                🤖 AI Difficulty
+                <select id="difficulty">
+                    <option value="easy">😊 Easy</option>
+                    <option value="normal" selected>😐 Normal</option>
+                    <option value="hard">😤 Hard</option>
+                </select>
+            </label>
+        </div>
+
+        <!-- Status line -->
+        <p id="lobby-status" class="status ok">Ready — upload faces or just hit Start!</p>
+
+        <!-- Start button -->
+        <button id="start-fight-btn" class="btn-start">⚔️ START FIGHT!</button>
+
+        <!-- Controls reference -->
+        <details class="controls-info">
+            <summary>🎮 Controls</summary>
+            <div class="controls-grid">
+                <kbd>A</kbd><kbd>D</kbd><span>Move left / right</span>
+                <kbd>W</kbd><span></span><span>Jump</span>
+                <kbd>J</kbd><span></span><span>Light Punch (8 dmg)</span>
+                <kbd>K</kbd><span></span><span>Heavy Punch (16 dmg)</span>
+                <kbd>L</kbd><span></span><span>Kick (12 dmg)</span>
+                <kbd>U</kbd><span></span><span>Special Move (22 dmg — needs 2+ combo)</span>
+                <kbd>Shift</kbd><span></span><span>Block (reduces damage by 85%)</span>
+            </div>
+        </details>
+
+        <!-- Share -->
+        <div class="share-section">
+            <button id="get-share-link-btn" class="btn-share">🔗 Get Share Link</button>
+            <div id="share-link-container" style="display:none;">
+                <input type="text" id="share-link-input" readonly
+                       placeholder="Share link will appear here…">
+                <p id="share-link-msg"></p>
+            </div>
+        </div>
+
+    </div><!-- /.lobby-box -->
+</div><!-- /#lobby-overlay -->
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PHASER CANVAS MOUNT
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="game-container"></div>
+
+<!-- Scripts (order matters: dependencies first) -->
+<script src="js/FaceManager.js"></script>
+<script src="js/Fighter.js"></script>
+<script src="js/EnemyAI.js"></script>
+<script src="js/FightScene.js"></script>
+<script src="js/ShareManager.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
