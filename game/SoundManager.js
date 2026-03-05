@@ -316,6 +316,40 @@ class SoundManager {
             this._osc(ctx, out, 'triangle', freq, freq, 0.18, 0.20, i * 0.07);
         });
     }
+
+    /** Escalating combo hit tone – pitch rises with hit count */
+    playComboHit(count) {
+        const ctx = this._getCtx(); if (!ctx) return;
+        const out = this._out();
+        const baseFreq = 260 + Math.min(count - 1, 12) * 40;
+        this._osc(ctx, out, 'triangle', baseFreq, baseFreq * 1.25, 0.10, 0.28);
+        this._osc(ctx, out, 'sine',     baseFreq * 2, baseFreq,    0.10, 0.12);
+    }
+
+    /** Shoryuken – dramatic rising flame-burst sound */
+    playShoryuken() {
+        const ctx = this._getCtx(); if (!ctx) return;
+        const out = this._out();
+        const now = ctx.currentTime;
+
+        // Rising power whoosh
+        this._osc(ctx, out, 'sawtooth', 100, 1100, 0.24, 0.70);
+        this._osc(ctx, out, 'sine',     160, 1600, 0.22, 0.40);
+
+        // Punchy uppercut crack on impact
+        this._osc(ctx, out, 'square', 700, 120, 0.20, 0.60, 0.18);
+        this._osc(ctx, out, 'sine',    80,  20, 0.30, 0.45, 0.18);
+
+        // Flame burst noise
+        const nBuf = this._noiseBuffer(ctx, 0.24);
+        const ns   = ctx.createBufferSource(); ns.buffer = nBuf;
+        const nf   = ctx.createBiquadFilter(); nf.type = 'bandpass';
+        nf.frequency.value = 2400; nf.Q.value = 0.7;
+        const ng   = ctx.createGain();
+        ng.gain.setValueAtTime(0.45, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+        ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(now);
+    }
 }
 
 // Global singleton

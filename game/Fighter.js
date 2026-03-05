@@ -18,7 +18,7 @@ class Fighter {
     static COMBOS = [
         { inputs: ['punch', 'punch', 'kick'],  name: 'HADOUKEN!',      damage: 38, knockback: 180 },
         { inputs: ['punch', 'punch', 'punch'], name: 'TRIPLE JABS!',   damage: 30, knockback: 100 },
-        { inputs: ['kick',  'kick',  'punch'], name: 'SHORYUKEN!',     damage: 35, knockback: 160 },
+        { inputs: ['kick',  'kick',  'punch'], name: 'DRAGON RUSH!',   damage: 35, knockback: 160 },
         { inputs: ['kick',  'kick',  'kick'],  name: 'HURRICANE KICK!',damage: 32, knockback: 140 },
     ];
 
@@ -45,9 +45,13 @@ class Fighter {
         this.maxHp = 100;
         this.hp    = 100;
 
+        // Super meter (SF-style gauge – fills from dealing/receiving damage)
+        this._superMeter    = 0;
+        this._superMeterMax = 100;
+
         // State machine
         // Valid states: 'idle'|'walking'|'jumping'|'punch'|'kick'|'crouchPunch'|'crouchKick'|
-        //               'jumpPunch'|'jumpKick'|'crouching'|'blocking'|'special'|'hit'|'ko'
+        //               'jumpPunch'|'jumpKick'|'crouching'|'blocking'|'special'|'shoryuken'|'hit'|'ko'
         this.state        = 'idle';
         this.stateTimer   = 0; // countdown (ms) until state ends
         this.isGrounded   = true;
@@ -62,6 +66,7 @@ class Fighter {
             jumpPunch:   { damage: 12, duration: 280, hitWindow: [60,  230], range: 70  },
             jumpKick:    { damage: 18, duration: 320, hitWindow: [80,  290], range: 80  },
             special:     { damage: 0,  duration: 450, hitWindow: [0,   0  ], range: 0   },
+            shoryuken:   { damage: 32, duration: 520, hitWindow: [55,  300], range: 52  },
         };
 
         // Projectile fire callback – assigned by FightScene after construction
@@ -134,6 +139,17 @@ class Fighter {
         if (elapsed < winStart || elapsed > winEnd) return null;
 
         const dir = this.facingRight ? 1 : -1;
+
+        // Shoryuken has a tall upward hitbox
+        if (this.state === 'shoryuken') {
+            return {
+                x: this.x - Fighter.WIDTH / 2 + dir * 4,
+                y: this.y - Fighter.HEIGHT * 1.8,
+                w: Fighter.WIDTH + attack.range,
+                h: Fighter.HEIGHT * 1.3,
+            };
+        }
+
         // Crouching attacks hit low; jump attacks travel with the fighter; normal attacks hit mid
         const isCrouch = this.state === 'crouchPunch' || this.state === 'crouchKick';
         const hitY  = isCrouch
@@ -152,13 +168,19 @@ class Fighter {
     }
 
     /** Deal damage to this fighter from an opponent's active attack. */
-    receiveHit(rawDamage) {
+    receiveHit(rawDamage, knockbackDir = 0, knockbackForce = 0) {
         if (this.state === 'ko') return 0;
         const dmg = this.isBlocking ? Math.floor(rawDamage * 0.2) : rawDamage;
         this.hp = Math.max(0, this.hp - dmg);
         this._flashTimer = 200;
+        // Build super meter from taking damage (SF mechanic – "revenge gauge")
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + Math.floor(dmg * 0.9));
         if (!this.isBlocking) {
             this._enterState('hit', 300);
+            // Apply knockback on strong hits (kick / Shoryuken)
+            if (knockbackDir !== 0 && knockbackForce > 0) {
+                this.velX = knockbackDir * knockbackForce;
+            }
         }
         if (this.hp === 0) {
             this._enterState('ko', Infinity);
@@ -200,6 +222,7 @@ class Fighter {
             this._enterState('punch', this._attacks.punch.duration);
         }
         this._attackHit = false;
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + 5);
         return true;
     }
 
@@ -215,6 +238,7 @@ class Fighter {
             this._enterState('kick', this._attacks.kick.duration);
         }
         this._attackHit = false;
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + 5);
         return true;
     }
 
@@ -230,6 +254,27 @@ class Fighter {
             }
         });
         return true;
+    }
+
+    /** Shoryuken – rising uppercut super move. Costs full super meter. */
+    shoryuken() {
+        if (!this._canAttack()) return false;
+        if (this._superMeter < this._superMeterMax) return false;
+        this._superMeter = 0;
+        this._enterState('shoryuken', this._attacks.shoryuken.duration);
+        this._attackHit = false;
+        // Launch upward and forward
+        this.velY       = -820;
+        this.isGrounded = false;
+        return true;
+    }
+
+    /** @returns {number} 0-100 */
+    getSuperMeter() { return this._superMeter; }
+
+    /** Add to the super meter (clamped to max). */
+    addSuperMeter(amount) {
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + amount);
     }
 
     /** Start/stop blocking */
@@ -348,7 +393,7 @@ class Fighter {
     // ── private helpers ───────────────────────────────────────
 
     _isAttacking() {
-        return ['punch', 'kick', 'crouchPunch', 'crouchKick', 'jumpPunch', 'jumpKick', 'special'].includes(this.state);
+        return ['punch', 'kick', 'crouchPunch', 'crouchKick', 'jumpPunch', 'jumpKick', 'special', 'shoryuken'].includes(this.state);
     }
 
     _canAttack() {
@@ -382,6 +427,7 @@ class Fighter {
                 break;
             case 'jumpPunch':
             case 'jumpKick':
+            case 'shoryuken':
                 // Return to jumping (or idle if already landed)
                 if (this.isGrounded) {
                     this._enterState('idle', 0);
@@ -448,6 +494,8 @@ class Fighter {
             ? Math.max(0, 1 - this.stateTimer / this._attacks.jumpPunch.duration) : 0;
         const jumpKickProg    = this.state === 'jumpKick'
             ? Math.max(0, 1 - this.stateTimer / this._attacks.jumpKick.duration) : 0;
+        const shoryukenProg   = this.state === 'shoryuken'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.shoryuken.duration) : 0;
 
         switch (this.state) {
             case 'idle': {
@@ -485,13 +533,14 @@ class Fighter {
                 break;
             }
             case 'kick': {
-                // SF roundhouse: leg rises high, body counter-leans
+                // SF roundhouse: leg rises to ~1.68 rad, body counter-leans dramatically
                 const s = Math.sin(kickProg * Math.PI);
-                rightLegAngle =  dir * s * 1.45;
-                bodyLeanX     = -dir * s * 9;
-                leftArmAngle  =  dir * s * 0.55;
-                rightArmAngle = -dir * s * 0.35;
-                crouchOffset  = -s * 7;
+                rightLegAngle =  dir * s * 1.68;   // higher leg raise than before
+                bodyLeanX     = -dir * s * 11;
+                leftArmAngle  =  dir * s * 0.62;
+                rightArmAngle = -dir * s * 0.42;
+                crouchOffset  = -s * 10;
+                headOffX      = -dir * s * 4;
                 break;
             }
             case 'crouching': {
@@ -586,6 +635,19 @@ class Fighter {
                 rightArmAngle =  dir * 0.32;
                 break;
             }
+            case 'shoryuken': {
+                // Rising Dragon Punch – arm drives straight upward, body rotates forward
+                const s = Math.sin(shoryukenProg * Math.PI);
+                rightArmAngle = -dir * (1.05 + s * 0.75);  // arm thrusts UP
+                leftArmAngle  =  dir * 0.22;
+                leftLegAngle  = -0.38;
+                rightLegAngle =  0.38;
+                bodyLeanX     =  dir * s * 12;
+                headOffX      =  dir * s * 5;
+                headOffY      = -s * 5;  // slight upward head surge
+                crouchOffset  = -s * 6;
+                break;
+            }
             case 'ko': {
                 // Dramatic backward collapse
                 bodyLeanX     = dir * 22;
@@ -650,6 +712,40 @@ class Fighter {
             g.fillCircle(ballX - ballR * 0.30, ballY - ballR * 0.30, ballR * 0.38);
         }
 
+        // ── Shoryuken: rising energy flame ────────────────────
+        if (this.state === 'shoryuken') {
+            const s     = Math.sin(shoryukenProg * Math.PI);
+            const pulse = Math.sin(now / 55) * 0.18 + 0.72;
+            // Outer fire halo
+            g.fillStyle(0xFF4400, 0.18 * pulse);
+            g.fillCircle(torsoX, torsoY, 40 + s * 22);
+            // Mid flame
+            g.fillStyle(0xFF8800, 0.40 * pulse);
+            g.fillCircle(torsoX + dir * 8, torsoY - s * 14, 22 + s * 12);
+            // Core bright tip (fist position)
+            const fistX = torsoX + dir * 14 + dir * s * 10;
+            const fistY = torsoY - 10 - s * 22;
+            g.fillStyle(0xFFDD00, 0.80);
+            g.fillCircle(fistX, fistY, 12 + s * 6);
+            g.fillStyle(0xffffff, 0.55);
+            g.fillCircle(fistX - 3, fistY - 3, 5);
+        }
+
+        // ── Super-meter full: golden power aura ───────────────
+        if (this._superMeter >= this._superMeterMax && this.state !== 'shoryuken') {
+            const pulse = Math.sin(now / 90) * 0.08 + 0.12;
+            g.fillStyle(0xFFD700, pulse);
+            g.fillCircle(x, y - Fighter.HEIGHT * 0.5, Fighter.HEIGHT * 0.68);
+            // Orbiting sparks
+            for (let i = 0; i < 4; i++) {
+                const angle = now / 320 + i * Math.PI / 2;
+                const sx = x  + Math.cos(angle) * 30;
+                const sy = (y - Fighter.HEIGHT * 0.5) + Math.sin(angle) * 18;
+                g.fillStyle(0xFFFF44, 0.65);
+                g.fillCircle(sx, sy, 3.5);
+            }
+        }
+
         // ── Arms ─────────────────────────────────────────────
         const armColor = flashing ? 0xff3333 : this.skinColor;
         const armW     = 12;
@@ -662,12 +758,21 @@ class Fighter {
         // Fist knuckle at tip of front arm during attacks
         const showFist = (this.state === 'punch'       && punchProg       > 0.30 && punchProg       < 0.85)
                       || (this.state === 'crouchPunch' && crouchPunchProg > 0.30 && crouchPunchProg < 0.85)
-                      || (this.state === 'jumpPunch'   && jumpPunchProg   > 0.28 && jumpPunchProg   < 0.88);
+                      || (this.state === 'jumpPunch'   && jumpPunchProg   > 0.28 && jumpPunchProg   < 0.88)
+                      || (this.state === 'shoryuken'   && shoryukenProg   > 0.15 && shoryukenProg   < 0.75);
         if (showFist) {
             const fistX = torsoX + dir * (18 + Math.sin(rightArmAngle) * armH);
             const fistY = shoulderY + Math.cos(rightArmAngle) * armH;
-            g.fillStyle(flashing ? 0xff3333 : this.skinColor, 1);
-            g.fillCircle(fistX, fistY, 8);
+            const fistColor = this.state === 'shoryuken'
+                ? (flashing ? 0xff3333 : 0xFFAA00)
+                : (flashing ? 0xff3333 : this.skinColor);
+            g.fillStyle(fistColor, 1);
+            g.fillCircle(fistX, fistY, this.state === 'shoryuken' ? 10 : 8);
+            if (this.state === 'shoryuken') {
+                // Extra energy ring on fist
+                g.lineStyle(2, 0xFFFF00, 0.7);
+                g.strokeCircle(fistX, fistY, 14);
+            }
         }
 
         // Boot / foot at tip of kicking leg during kick states
@@ -721,7 +826,7 @@ class Fighter {
             if (this.state === 'hit' || this.state === 'ko') {
                 // Grimace
                 g.arc(headCX, headCY + 9, 7, Math.PI, 0);
-            } else if (['punch','kick','crouchPunch','crouchKick','jumpPunch','jumpKick','special'].includes(this.state)) {
+            } else if (['punch','kick','crouchPunch','crouchKick','jumpPunch','jumpKick','special','shoryuken'].includes(this.state)) {
                 // Fierce war cry
                 g.arc(headCX, headCY + 3, 9, 0.15, Math.PI - 0.15);
             } else {

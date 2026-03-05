@@ -8,6 +8,9 @@
  *   arenaIndex    {number}  - 0|1|2 which arena to load
  */
 
+/** ms window for the hit-combo counter to stay active between hits */
+const HIT_COMBO_TIMEOUT = 1800;
+
 const ARENAS = [
     {
         name: 'Steel Factory',
@@ -257,19 +260,23 @@ class FightScene extends Phaser.Scene {
 
 
     _createHUD(W) {
-        const barH   = 22;
-        const barY   = 36;       // top of HP bars
-        const nameY  = 8;        // top of name text row
-        const barW   = W * 0.41; // ~197 px at W=480 — leaves ~86 px for center timer
-        const eBarX  = W - 8 - barW;
-        const cx     = W / 2;
+        const barH      = 22;
+        const barY      = 36;          // top of HP bars
+        const nameY     = 8;           // top of name text row
+        const barW      = W * 0.41;    // ~197 px at W=480 — leaves ~86 px for center timer
+        const eBarX     = W - 8 - barW;
+        const cx        = W / 2;
+        const superBarH = 6;           // SF-style super meter height
+        const superBarY = barY + barH + 3;  // sits right below HP bars
+        const pipY      = superBarY + superBarH + 6;  // win pips below super bar
+        const hudHeight = pipY + 14;   // HUD backing strip height
 
         // ── Translucent HUD backing strip ─────────────────────
         const hudBg = this.add.graphics();
         hudBg.fillStyle(0x000000, 0.52);
-        hudBg.fillRect(0, 0, W, barY + barH + 22);
+        hudBg.fillRect(0, 0, W, hudHeight);
         hudBg.lineStyle(1, 0x223355, 0.7);
-        hudBg.strokeRect(0, barY + barH + 22, W, 0);
+        hudBg.strokeRect(0, hudHeight, W, 0);
 
         // ── Player name (left) ────────────────────────────────
         this.add.text(10, nameY, (this._playerConfig.name || 'PLAYER').toUpperCase(), {
@@ -299,6 +306,30 @@ class FightScene extends Phaser.Scene {
         this._enemyHpBg.strokeRoundedRect(eBarX, barY, barW, barH, 4);
         this._enemyHpFill = this.add.graphics();
 
+        // ── Player super meter (SF-style golden gauge) ────────
+        const playerSuperBg = this.add.graphics();
+        playerSuperBg.fillStyle(0x1a0a00, 0.92);
+        playerSuperBg.fillRoundedRect(8, superBarY, barW, superBarH, 3);
+        playerSuperBg.lineStyle(1, 0x886600, 0.5);
+        playerSuperBg.strokeRoundedRect(8, superBarY, barW, superBarH, 3);
+        this._playerSuperFill = this.add.graphics();
+
+        // ── Enemy super meter ─────────────────────────────────
+        const enemySuperBg = this.add.graphics();
+        enemySuperBg.fillStyle(0x1a0a00, 0.92);
+        enemySuperBg.fillRoundedRect(eBarX, superBarY, barW, superBarH, 3);
+        enemySuperBg.lineStyle(1, 0x886600, 0.5);
+        enemySuperBg.strokeRoundedRect(eBarX, superBarY, barW, superBarH, 3);
+        this._enemySuperFill = this.add.graphics();
+
+        // "SUPER" labels flanking the timer
+        this.add.text(9, superBarY - 1, 'SUPER', {
+            fontSize: '7px', fontFamily: 'Arial', color: '#AA8800',
+        });
+        this.add.text(W - 9, superBarY - 1, 'SUPER', {
+            fontSize: '7px', fontFamily: 'Arial', color: '#AA8800',
+        }).setOrigin(1, 0);
+
         // ── Timer ─────────────────────────────────────────────
         this._timerText = this.add.text(cx, barY - 1, '99', {
             fontSize: '30px',
@@ -315,7 +346,6 @@ class FightScene extends Phaser.Scene {
         }).setOrigin(0.5, 0);
 
         // ── Win pips ──────────────────────────────────────────
-        const pipY = barY + barH + 9;
         this._playerWinPips = [];
         this._enemyWinPips  = [];
         for (let i = 0; i < this._maxRounds; i++) {
@@ -334,8 +364,8 @@ class FightScene extends Phaser.Scene {
             this._enemyWinPips.push(ep);
         }
 
-        // ── Combo text ────────────────────────────────────────
-        this._comboText = this.add.text(cx, barY + barH + 26, '', {
+        // ── Combo / hit-counter text ──────────────────────────
+        this._comboText = this.add.text(cx, pipY + 6, '', {
             fontSize: '21px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
@@ -344,24 +374,44 @@ class FightScene extends Phaser.Scene {
             strokeThickness: 3,
         }).setOrigin(0.5, 0).setAlpha(0);
 
+        // ── Hit combo counter (left side) ─────────────────────
+        this._hitCounterText = this.add.text(14, pipY + 6, '', {
+            fontSize: '20px',
+            fontFamily: 'Arial Black, Arial',
+            fontStyle: 'bold',
+            color: '#FF8C00',
+            stroke: '#000000',
+            strokeThickness: 3,
+        }).setAlpha(0);
+
         // ── Keyboard hint (desktop) ───────────────────────────
         const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         this._controlsHint = this.add.text(cx, this.scale.height - 14,
-            '← → Move  ↑ Jump  Z Punch  X Kick  C Block  V Special', {
+            '← → Move  ↑ Jump  Z Punch  X Kick  C Block  V Special/Shoryuken', {
             fontSize: '10px', fontFamily: 'Arial', color: '#666677',
         }).setOrigin(0.5, 1).setVisible(!isMobile);
 
         // Cache layout values
-        this._barW  = barW;
-        this._barH  = barH;
-        this._barY  = barY;
-        this._eBarX = eBarX;
-        this._prevPlayerHpRatio = -1;
-        this._prevEnemyHpRatio  = -1;
+        this._barW       = barW;
+        this._barH       = barH;
+        this._barY       = barY;
+        this._eBarX      = eBarX;
+        this._superBarY  = superBarY;
+        this._superBarH  = superBarH;
+        this._pipY       = pipY;
+        this._prevPlayerHpRatio    = -1;
+        this._prevEnemyHpRatio     = -1;
+        this._playerSuperWasFull   = false;
+        this._enemySuperWasFull    = false;
+
+        // Hit combo tracking
+        this._hitComboCount = 0;
+        this._hitComboTimer = 0;
     }
 
     _updateHUD(delta) {
-        const W = this.scale.width;
+        const W   = this.scale.width;
+        const now = Date.now();
 
         // Player HP (fills left → right)
         const pRatio = this.player.hp / this.player.maxHp;
@@ -394,6 +444,42 @@ class FightScene extends Phaser.Scene {
             this._prevEnemyHpRatio = eRatio;
         }
 
+        // ── Super meters (updated every frame for smooth animation) ──
+        const pSuperRatio = this.player.getSuperMeter() / 100;
+        this._playerSuperFill.clear();
+        if (pSuperRatio > 0) {
+            const isFull = pSuperRatio >= 1;
+            const pulse  = isFull ? (Math.floor(now / 200) % 2 === 0 ? 0xFFFF88 : 0xFFCC00) : 0xCC8800;
+            this._playerSuperFill.fillStyle(pulse, 1);
+            this._playerSuperFill.fillRoundedRect(8, this._superBarY, this._barW * pSuperRatio, this._superBarH, 3);
+            if (isFull) {
+                this._playerSuperFill.fillStyle(0xFFFFFF, 0.28);
+                this._playerSuperFill.fillRoundedRect(8, this._superBarY, this._barW * pSuperRatio, this._superBarH * 0.5, 3);
+            }
+        }
+        // Trigger "SUPER READY!" notification once when meter fills
+        const pSuperFull = pSuperRatio >= 1;
+        if (pSuperFull && !this._playerSuperWasFull) {
+            this._showComboText('⚡ SUPER READY!');
+        }
+        this._playerSuperWasFull = pSuperFull;
+
+        const eSuperRatio = this.enemy.getSuperMeter() / 100;
+        this._enemySuperFill.clear();
+        if (eSuperRatio > 0) {
+            const isFull  = eSuperRatio >= 1;
+            const pulse   = isFull ? (Math.floor(now / 200) % 2 === 0 ? 0xFFFF88 : 0xFFCC00) : 0xCC8800;
+            const fillW   = this._barW * eSuperRatio;
+            const fillX   = this._eBarX + (this._barW - fillW);
+            this._enemySuperFill.fillStyle(pulse, 1);
+            this._enemySuperFill.fillRoundedRect(fillX, this._superBarY, fillW, this._superBarH, 3);
+            if (isFull) {
+                this._enemySuperFill.fillStyle(0xFFFFFF, 0.28);
+                this._enemySuperFill.fillRoundedRect(fillX, this._superBarY, fillW, this._superBarH * 0.5, 3);
+            }
+        }
+        this._enemySuperWasFull = eSuperRatio >= 1;
+
         // Timer countdown
         this._timerAccum += delta;
         if (this._timerAccum >= 1000) {
@@ -407,6 +493,15 @@ class FightScene extends Phaser.Scene {
         if (this._comboText.alpha > 0) {
             this._comboText.setAlpha(this._comboText.alpha - delta / 1400);
         }
+
+        // Hit combo counter timer – hide after inactivity
+        if (this._hitComboTimer > 0) {
+            this._hitComboTimer -= delta;
+            if (this._hitComboTimer <= 0) {
+                this._hitComboCount = 0;
+                this._hitCounterText.setAlpha(0);
+            }
+        }
     }
 
     _hpColor(ratio) {
@@ -417,7 +512,7 @@ class FightScene extends Phaser.Scene {
 
     _updateWinPips() {
         const W   = this.scale.width;
-        const pipY = this._barY + this._barH + 9;
+        const pipY = this._pipY;
         for (let i = 0; i < this._maxRounds; i++) {
             const pp = this._playerWinPips[i];
             pp.clear();
@@ -509,12 +604,18 @@ class FightScene extends Phaser.Scene {
             mi.kickJustDown = false;
         }
 
-        // Special (charge while held, release to fire Hadouken)
+        // Special (charge while held, release to fire Hadouken; or Shoryuken if super is full)
         if (k.special.isDown || mi.specialDown) {
             p.chargeSpecial(delta);
         }
         if (Phaser.Input.Keyboard.JustUp(k.special) || mi.specialJustUp) {
-            if (p.getSpecialCharge() >= 50) {
+            if (p.getSuperMeter() >= 100) {
+                // Super meter full → Shoryuken!
+                if (p.shoryuken()) {
+                    soundManager.playShoryuken();
+                    this.enemy.recordPlayerAttack('special');
+                }
+            } else if (p.getSpecialCharge() >= 50) {
                 p.special();
                 soundManager.playSpecialRelease();
                 this.enemy.recordPlayerAttack('special');
@@ -536,6 +637,26 @@ class FightScene extends Phaser.Scene {
     _showComboText(text) {
         this._comboText.setText(text);
         this._comboText.setAlpha(1);
+    }
+
+    /** Camera shake for impactful hits (SF-style screen shake). */
+    _screenShake(intensity, duration) {
+        this.cameras.main.shake(duration, intensity * 0.001);
+    }
+
+    /** Record that the player landed a hit and update the combo counter. */
+    _recordPlayerHit() {
+        this._hitComboCount++;
+        this._hitComboTimer = HIT_COMBO_TIMEOUT;
+        if (this._hitComboCount >= 2) {
+            this._hitCounterText.setText(this._hitComboCount + ' HIT!');
+            this._hitCounterText.setAlpha(1).setScale(1.3);
+            this.tweens.add({
+                targets: this._hitCounterText, scaleX: 1, scaleY: 1,
+                duration: 140, ease: 'Back.Out',
+            });
+            soundManager.playComboHit(this._hitComboCount);
+        }
     }
 
     // ── projectile system (Hadouken) ──────────────────────────
@@ -622,16 +743,37 @@ class FightScene extends Phaser.Scene {
                 const state  = this.player.state;
                 const attack = this.player._attacks[state];
                 if (attack && attack.damage > 0) {
-                    const dmg = attack.damage;
+                    const dmg      = attack.damage;
+                    const isHeavy  = ['kick', 'crouchKick', 'jumpKick', 'shoryuken'].includes(state);
+                    const knockDir = this.player.facingRight ? 1 : -1;
+                    const knockForce = state === 'shoryuken' ? 280
+                                     : isHeavy               ? 180
+                                     :                         0;
                     if (this.enemy.isBlocking) {
                         soundManager.playBlock();
+                        this.enemy.receiveHit(Math.floor(dmg * 0.2), knockDir, knockForce * 0.3);
                     } else {
                         soundManager.playEnemyHitVoice();
+                        this.enemy.receiveHit(dmg, knockDir, knockForce);
+                        // Attacker gains super meter on hit
+                        this.player.addSuperMeter(10 + (isHeavy ? 5 : 0));
+                        // Hit combo counter
+                        this._recordPlayerHit();
                     }
-                    this.enemy.receiveHit(dmg);
                     this.player._attackHit = true;
-                    this._spawnHitEffect(this.enemy.x, this.enemy.y - 60, false);
+                    this._spawnHitEffect(this.enemy.x, this.enemy.y - 60, false, state === 'shoryuken');
+                    // Screen shake proportional to hit strength
+                    if (!this.enemy.isBlocking) {
+                        if (state === 'shoryuken') {
+                            this._screenShake(8, 160);
+                        } else if (isHeavy) {
+                            this._screenShake(4, 80);
+                        } else {
+                            this._screenShake(2, 45);
+                        }
+                    }
                     if (this.enemy.isKO()) {
+                        this._screenShake(10, 280);
                         this.time.delayedCall(120, () => soundManager.playKO());
                     }
                 }
@@ -645,16 +787,33 @@ class FightScene extends Phaser.Scene {
                 const state  = this.enemy.state;
                 const attack = this.enemy._attacks[state];
                 if (attack && attack.damage > 0) {
-                    const dmg = attack.damage;
+                    const dmg      = attack.damage;
+                    const isHeavy  = ['kick', 'crouchKick', 'jumpKick', 'shoryuken'].includes(state);
+                    const knockDir = this.enemy.facingRight ? 1 : -1;
+                    const knockForce = state === 'shoryuken' ? 280
+                                     : isHeavy               ? 180
+                                     :                         0;
                     if (this.player.isBlocking) {
                         soundManager.playBlock();
+                        this.player.receiveHit(Math.floor(dmg * 0.2), knockDir, knockForce * 0.3);
                     } else {
                         soundManager.playHitReceived();
+                        this.player.receiveHit(dmg, knockDir, knockForce);
+                        this.enemy.addSuperMeter(10 + (isHeavy ? 5 : 0));
                     }
-                    this.player.receiveHit(dmg);
                     this.enemy._attackHit = true;
-                    this._spawnHitEffect(this.player.x, this.player.y - 60, true);
+                    this._spawnHitEffect(this.player.x, this.player.y - 60, true, state === 'shoryuken');
+                    if (!this.player.isBlocking) {
+                        if (state === 'shoryuken') {
+                            this._screenShake(8, 160);
+                        } else if (isHeavy) {
+                            this._screenShake(4, 80);
+                        } else {
+                            this._screenShake(2, 45);
+                        }
+                    }
                     if (this.player.isKO()) {
+                        this._screenShake(10, 280);
                         this.time.delayedCall(120, () => soundManager.playKO());
                     }
                 }
@@ -669,40 +828,49 @@ class FightScene extends Phaser.Scene {
                a.y + a.h > b.y;
     }
 
-    _spawnHitEffect(x, y, redTeam) {
-        const symbols = ['★', '💥', '✸', '⚡', '✦'];
+    _spawnHitEffect(x, y, redTeam, isSuper = false) {
+        const symbols = isSuper
+            ? ['🔥', '💥', '⚡', '★', '✸']
+            : ['★', '💥', '✸', '⚡', '✦'];
         const color   = redTeam ? '#FF4455' : '#FFCC00';
 
-        // Central burst flash
+        // Central burst flash (larger for super moves)
+        const burstR = isSuper ? 42 : 26;
         const flash = this.add.graphics();
-        flash.fillStyle(redTeam ? 0xFF2244 : 0xFFBB00, 0.55);
-        flash.fillCircle(x, y, 26);
+        flash.fillStyle(isSuper ? 0xFF8800 : (redTeam ? 0xFF2244 : 0xFFBB00), isSuper ? 0.75 : 0.55);
+        flash.fillCircle(x, y, burstR);
+        if (isSuper) {
+            // Extra outer ring for Shoryuken
+            flash.lineStyle(3, 0xFFFFAA, 0.65);
+            flash.strokeCircle(x, y, burstR * 1.6);
+        }
         this.tweens.add({
-            targets: flash, alpha: 0, scaleX: 2.2, scaleY: 2.2,
-            duration: 180, ease: 'Power2',
+            targets: flash, alpha: 0, scaleX: isSuper ? 3.0 : 2.2, scaleY: isSuper ? 3.0 : 2.2,
+            duration: isSuper ? 280 : 180, ease: 'Power2',
             onComplete: () => flash.destroy(),
         });
 
-        // Scatter particles
-        for (let i = 0; i < 4; i++) {
-            const sym = i === 0 ? symbols[Math.floor(Math.random() * symbols.length)] : '·';
-            const ox  = (Math.random() - 0.5) * 36;
-            const oy  = (Math.random() - 0.5) * 24;
+        // Scatter particles (more for super)
+        const count = isSuper ? 7 : 4;
+        for (let i = 0; i < count; i++) {
+            const sym = i === 0 ? symbols[Math.floor(Math.random() * symbols.length)] : (isSuper && i < 3 ? '✦' : '·');
+            const ox  = (Math.random() - 0.5) * (isSuper ? 52 : 36);
+            const oy  = (Math.random() - 0.5) * (isSuper ? 36 : 24);
             const t   = this.add.text(x + ox, y + oy, sym, {
-                fontSize: i === 0 ? '26px' : '16px',
-                color,
+                fontSize: i === 0 ? (isSuper ? '34px' : '26px') : '16px',
+                color: isSuper ? '#FF8800' : color,
                 stroke: '#000000',
                 strokeThickness: 2,
             }).setOrigin(0.5);
 
             this.tweens.add({
                 targets: t,
-                y:       y + oy - 55 - Math.random() * 22,
-                x:       x + ox + (Math.random() - 0.5) * 36,
+                y:       y + oy - (isSuper ? 80 : 55) - Math.random() * 22,
+                x:       x + ox + (Math.random() - 0.5) * (isSuper ? 52 : 36),
                 alpha:   0,
-                scaleX:  i === 0 ? 1.6 : 1,
-                scaleY:  i === 0 ? 1.6 : 1,
-                duration: 380 + Math.random() * 120,
+                scaleX:  i === 0 ? (isSuper ? 2.2 : 1.6) : 1,
+                scaleY:  i === 0 ? (isSuper ? 2.2 : 1.6) : 1,
+                duration: (isSuper ? 480 : 380) + Math.random() * 120,
                 ease:    'Power2',
                 onComplete: () => t.destroy(),
             });
@@ -846,14 +1014,23 @@ class FightScene extends Phaser.Scene {
         this.player.x   = 115;
         this.player.y   = this._groundY;
         this.player.hp  = this.player.maxHp;
+        this.player._superMeter = 0;
         this.player._enterState('idle', 0);
         this._prevPlayerHpRatio = -1;
 
         this.enemy.x    = W - 115;
         this.enemy.y    = this._groundY;
         this.enemy.hp   = this.enemy.maxHp;
+        this.enemy._superMeter = 0;
         this.enemy._enterState('idle', 0);
         this._prevEnemyHpRatio = -1;
+
+        // Reset hit combo counter
+        this._hitComboCount = 0;
+        this._hitComboTimer = 0;
+        this._hitCounterText.setAlpha(0);
+        this._playerSuperWasFull = false;
+        this._enemySuperWasFull  = false;
 
         this._roundTimer = 99;
         this._timerText.setText('99').setColor('#ffffff');

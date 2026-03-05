@@ -125,6 +125,12 @@ class EnemyAI extends Fighter {
     }
 
     _chooseAttack(dist) {
+        // Use Shoryuken when super meter is full and player is in range
+        if (this._superMeter >= this._superMeterMax && dist < 130) {
+            this.shoryuken();
+            return;
+        }
+
         // Bias attack choice based on player history
         const punchCount = this._playerHistory.filter(a => a === 'punch').length;
         const kickCount  = this._playerHistory.filter(a => a === 'kick').length;
