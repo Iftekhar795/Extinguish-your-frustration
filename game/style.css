@@ -1,0 +1,371 @@
+/* style.css – Face Fighter game styling */
+
+/* ── Reset & base ────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --bg-dark:    #0a0a1a;
+    --bg-panel:   #12122a;
+    --bg-card:    #1a1a35;
+    --accent:     #FF6B35;
+    --accent2:    #FFD700;
+    --text:       #e8e8f0;
+    --text-muted: #888899;
+    --border:     #2a2a4a;
+    --success:    #2ECC71;
+    --error:      #E74C3C;
+}
+
+html, body {
+    height: 100%;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+}
+
+/* ── Setup Screen ──────────────────────────────────────── */
+#setup-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: linear-gradient(135deg, #0a0a1a 0%, #16163a 50%, #0a0a1a 100%);
+}
+
+/* Title */
+.game-title {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.game-title h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #FF6B35, #FFD700, #FF6B35);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+}
+
+.game-title p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-top: 6px;
+}
+
+/* Fighter columns */
+.fighters-row {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.fighter-card {
+    flex: 1;
+    min-width: 280px;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+}
+
+.fighter-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fighter-card.player-card h2 { color: #4FC3F7; }
+.fighter-card.enemy-card  h2 { color: #FF6B6B; }
+
+/* Drop zone */
+.drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--bg-panel);
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(255,107,53,0.06);
+}
+
+.drop-zone .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+/* Face preview */
+.face-preview {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--accent);
+    display: none;
+    margin: 8px auto 4px;
+}
+
+/* Form fields */
+.form-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.form-row label {
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.form-row input[type="text"],
+.form-row input[type="file"] {
+    flex: 1;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-row input[type="text"]:focus,
+.form-row input[type="file"]:focus {
+    border-color: var(--accent);
+}
+
+.form-row input[type="color"] {
+    width: 44px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    padding: 2px;
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+.btn-primary:hover { background: #e05020; }
+
+.btn-secondary {
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--border); color: var(--text); }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+}
+.btn-ghost:hover { background: rgba(255,215,0,0.1); }
+
+/* vs divider */
+.vs-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--accent);
+    padding: 10px 0;
+}
+
+/* Arena / difficulty / controls row */
+.controls-row {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.control-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.control-group label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.control-group select {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+}
+.control-group select:focus { border-color: var(--accent); }
+
+/* Start button */
+.start-row {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+#start-fight-btn {
+    padding: 16px 60px;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #FF6B35, #FF9F43);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+}
+#start-fight-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(255,107,53,0.55);
+}
+#start-fight-btn:active { transform: translateY(0); }
+
+/* Status */
+.status {
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: rgba(46,204,113,0.12);
+    color: var(--success);
+    min-width: 200px;
+    text-align: center;
+}
+.status.error {
+    background: rgba(231,76,60,0.12);
+    color: var(--error);
+}
+
+/* How-to-play */
+.how-to-play {
+    width: 100%;
+    max-width: 900px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-top: 10px;
+}
+
+.how-to-play h3 {
+    font-size: 14px;
+    color: var(--accent2);
+    margin-bottom: 10px;
+}
+
+.how-to-play .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px;
+}
+
+.how-to-play .ctrl {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.how-to-play .ctrl kbd {
+    display: inline-block;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: var(--text);
+    margin-right: 4px;
+}
+
+/* ── Game Screen ──────────────────────────────────────────── */
+#game-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    background: #000;
+}
+
+#game-container {
+    width: 100%;
+    max-width: 900px;
+}
+
+#game-container canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 620px) {
+    .fighters-row { gap: 10px; }
+    .fighter-card { padding: 14px; min-width: 260px; }
+    #start-fight-btn { padding: 14px 36px; font-size: 18px; }
+    .vs-divider { font-size: 22px; }
+}
