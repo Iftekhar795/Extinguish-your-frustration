@@ -1,0 +1,102 @@
+/**
+ * main.js
+ * Game initialization and configuration
+ */
+
+const config = {
+    type: Phaser.AUTO,
+    width: 1024,
+    height: 600,
+    parent: 'game-container',
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 0 },
+            debug: false
+        }
+    },
+    scene: GameScene,
+    render: {
+        pixelArt: false,
+        antialias: true
+    }
+};
+
+const game = new Phaser.Game(config);
+
+// UI Event Listeners
+document.getElementById('load-player-btn').addEventListener('click', () => {
+    const fileInput = document.getElementById('player-sprite');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        updateStatus('Please select a file first', true);
+        return;
+    }
+
+    spriteManager.loadCustomSprite(file, 'player', (error, result) => {
+        if (error) {
+            updateStatus('Error loading player sprite: ' + error.message, true);
+        } else {
+            updateStatus(`Player sprite loaded successfully (${result.width}x${result.height}px)`, false);
+            const scene = game.scene.getScene('GameScene');
+            if (scene) {
+                spriteManager.registerTextures(scene);
+            }
+        }
+    });
+});
+
+document.getElementById('load-enemy-btn').addEventListener('click', () => {
+    const fileInput = document.getElementById('enemy-sprite');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        updateStatus('Please select a file first', true);
+        return;
+    }
+
+    spriteManager.loadCustomSprite(file, 'enemy', (error, result) => {
+        if (error) {
+            updateStatus('Error loading enemy sprite: ' + error.message, true);
+        } else {
+            updateStatus(`Enemy sprite loaded successfully (${result.width}x${result.height}px)`, false);
+            const scene = game.scene.getScene('GameScene');
+            if (scene) {
+                spriteManager.registerTextures(scene);
+            }
+        }
+    });
+});
+
+document.getElementById('apply-settings-btn').addEventListener('click', () => {
+    const playerFPS = parseInt(document.getElementById('player-fps').value);
+    const enemyFPS = parseInt(document.getElementById('enemy-fps').value);
+
+    const scene = game.scene.getScene('GameScene');
+    if (scene && scene.player) {
+        scene.player.setAnimationFPS(playerFPS);
+    }
+    if (scene && scene.enemy) {
+        scene.enemy.setAnimationFPS(enemyFPS);
+    }
+
+    updateStatus(`Animation FPS updated - Player: ${playerFPS}, Enemy: ${enemyFPS}`, false);
+});
+
+/**
+ * Update status message UI
+ * @param {string} message - Message to display
+ * @param {boolean} isError - Whether this is an error message
+ */
+function updateStatus(message, isError = false) {
+    const statusEl = document.getElementById('status-message');
+    statusEl.textContent = message;
+    statusEl.classList.toggle('error', isError);
+}
+
+// Log when game is ready
+window.addEventListener('load', () => {
+    console.log('2D Endless Runner Game Loaded!');
+    console.log('Upload your custom sprites using the controls above.');
+});

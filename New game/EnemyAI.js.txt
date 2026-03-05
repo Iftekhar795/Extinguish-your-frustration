@@ -1,0 +1,150 @@
+/**
+ * EnemyAI.js
+ * Handles AI-controlled enemy movement, animation, and behavior
+ */
+
+class EnemyAI {
+    constructor(scene, x, y, spriteKey) {
+        this.scene = scene;
+        this.sprite = scene.add.sprite(x, y, spriteKey);
+        this.sprite.setScale(1.5);
+        this.sprite.flipX = true; // Mirror sprite for enemy appearance
+
+        this.velocityX = 180; // Slightly slower than player
+        this.velocityY = 0;
+        this.gravity = 600;
+        this.isJumping = false;
+        this.isGrounded = false;
+        this.groundY = y;
+
+        // AI behavior
+        this.jumpCooldown = 0;
+        this.jumpChance = 0.02; // Jump chance per frame
+        this.detectionRange = 150; // Detection range for obstacles
+        this.currentAnimation = null;
+        this.animationFPS = 10;
+
+        // State machine
+        this.state = 'running'; // 'running', 'jumping', 'dodging'
+    }
+
+    /**
+     * Update enemy AI and physics
+     * @param {number} deltaTime - Delta time since last frame
+     * @param {Object} playerPos - Player position for AI decisions
+     */
+    update(deltaTime, playerPos) {
+        deltaTime = deltaTime / 1000;
+
+        // Apply gravity
+        if (!this.isGrounded) {
+            this.velocityY += this.gravity * deltaTime;
+        }
+
+        // Update Y position
+        this.sprite.y += this.velocityY * deltaTime;
+
+        // Check ground collision
+        if (this.sprite.y >= this.groundY) {
+            this.sprite.y = this.groundY;
+            this.velocityY = 0;
+            this.isJumping = false;
+            this.isGrounded = true;
+        }
+
+        // Move forward
+        this.sprite.x += this.velocityX * deltaTime;
+
+        // AI decision making
+        this.updateAI(deltaTime, playerPos);
+
+        // Play animations
+        if (this.isGrounded && this.state === 'running') {
+            this.playAnimation('run');
+        } else if (this.isJumping) {
+            this.playAnimation('jump');
+        }
+
+        // Reset to start if off-screen
+        if (this.sprite.x > this.scene.scale.width + 100) {
+            this.sprite.x = -100;
+        }
+    }
+
+    /**
+     * AI decision making logic
+     * @param {number} deltaTime - Delta time
+     * @param {Object} playerPos - Player position
+     */
+    updateAI(deltaTime, playerPos) {
+        this.jumpCooldown = Math.max(0, this.jumpCooldown - deltaTime);
+
+        // Simple obstacle avoidance and jumping
+        if (this.isGrounded && this.jumpCooldown === 0 && Math.random() < this.jumpChance) {
+            this.jump();
+            this.jumpCooldown = 1.5; // Cooldown between jumps
+        }
+
+        // Chase behavior - try to stay ahead
+        const distanceToPlayer = this.sprite.x - playerPos.x;
+        if (distanceToPlayer < 100 && this.isGrounded && this.jumpCooldown === 0) {
+            this.jump();
+            this.jumpCooldown = 1.0;
+        }
+    }
+
+    /**
+     * Make enemy jump
+     */
+    jump() {
+        if (this.isGrounded) {
+            this.velocityY = -320; // Slightly lower jump than player
+            this.isJumping = true;
+            this.isGrounded = false;
+            this.state = 'jumping';
+        }
+    }
+
+    /**
+     * Play animation
+     * @param {string} animationKey - Animation key
+     */
+    playAnimation(animationKey) {
+        if (this.currentAnimation !== animationKey) {
+            if (this.scene.anims.exists(animationKey)) {
+                this.sprite.play(animationKey, true);
+                this.currentAnimation = animationKey;
+            }
+        }
+    }
+
+    /**
+     * Set animation FPS
+     * @param {number} fps - Frames per second
+     */
+    setAnimationFPS(fps) {
+        this.animationFPS = fps;
+        if (this.currentAnimation) {
+            const anim = this.scene.anims.get(this.currentAnimation);
+            if (anim) {
+                anim.frameRate = fps;
+            }
+        }
+    }
+
+    /**
+     * Get sprite bounds
+     * @returns {Object} Bounds object
+     */
+    getBounds() {
+        return this.sprite.getBounds();
+    }
+
+    /**
+     * Get sprite position
+     * @returns {Object} Position object
+     */
+    getPosition() {
+        return { x: this.sprite.x, y: this.sprite.y };
+    }
+}

@@ -1,0 +1,216 @@
+/**
+ * GameScene.js
+ * Main game scene handling gameplay, collisions, and scoring
+ */
+
+class GameScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'GameScene' });
+        this.player = null;
+        this.enemy = null;
+        this.ground = null;
+        this.obstacles = null;
+        this.score = 0;
+        this.gameOver = false;
+        this.scoreText = null;
+    }
+
+    preload() {
+        // Preload assets here if needed
+    }
+
+    create() {
+        // Set background color and gradient
+        this.cameras.main.setBackgroundColor('#87CEEB');
+
+        // Create ground
+        const groundY = this.scale.height - 100;
+        this.ground = this.add.rectangle(
+            this.scale.width / 2,
+            groundY,
+            this.scale.width,
+            100,
+            0x8B7355
+        );
+        this.physics.add.existing(this.ground, true);
+
+        // Register custom textures
+        spriteManager.registerTextures(this);
+
+        // Create player if texture is loaded
+        if (spriteManager.isTextureLoaded('player')) {
+            this.player = new PlayerController(
+                this,
+                100,
+                groundY - 32,
+                'player'
+            );
+
+            // Create run and jump animations
+            spriteManager.createAnimation(this, 'player', 'run', {
+                frameCount: 4,
+                fps: 10,
+                repeat: -1
+            });
+
+            spriteManager.createAnimation(this, 'player', 'jump', {
+                frameCount: 1,
+                fps: 1,
+                repeat: 0
+            });
+        }
+
+        // Create enemy if texture is loaded
+        if (spriteManager.isTextureLoaded('enemy')) {
+            this.enemy = new EnemyAI(
+                this,
+                this.scale.width - 150,
+                groundY - 32,
+                'enemy'
+            );
+
+            spriteManager.createAnimation(this, 'enemy', 'run', {
+                frameCount: 4,
+                fps: 10,
+                repeat: -1
+            });
+
+            spriteManager.createAnimation(this, 'enemy', 'jump', {
+                frameCount: 1,
+                fps: 1,
+                repeat: 0
+            });
+        }
+
+        // Create obstacle group
+        this.obstacles = this.physics.add.group();
+        this.createObstacles();
+
+        // Score text
+        this.scoreText = this.add.text(20, 20, 'Score: 0', {
+            fontSize: '32px',
+            fill: '#fff',
+            fontStyle: 'bold'
+        });
+
+        // Collision detection
+        if (this.player) {
+            this.physics.add.collider(
+                this.player.sprite,
+                this.ground,
+                () => {},
+                null,
+                this
+            );
+            this.physics.add.overlap(
+                this.player.sprite,
+                this.obstacles,
+                () => this.handlePlayerCollision(),
+                null,
+                this
+            );
+        }
+
+        if (this.enemy && this.player) {
+            this.physics.add.overlap(
+                this.player.sprite,
+                this.enemy.sprite,
+                () => this.handlePlayerEnemyCollision(),
+                null,
+                this
+            );
+        }
+    }
+
+    /**
+     * Create obstacles at intervals
+     */
+    createObstacles() {
+        for (let i = 1; i <= 5; i++) {
+            const obstacleX = this.scale.width + i * 300;
+            const obstacleY = this.scale.height - 120;
+            const obstacle = this.add.rectangle(
+                obstacleX,
+                obstacleY,
+                30,
+                40,
+                0xFF6B6B
+            );
+            this.physics.add.existing(obstacle, true);
+            this.obstacles.add(obstacle);
+        }
+    }
+
+    /**
+     * Handle player-obstacle collision
+     */
+    handlePlayerCollision() {
+        if (!this.gameOver) {
+            this.gameOver = true;
+            this.player.sprite.setTint(0xff0000);
+            this.add.text(
+                this.scale.width / 2,
+                this.scale.height / 2,
+                'GAME OVER! Score: ' + this.score,
+                {
+                    fontSize: '48px',
+                    fill: '#fff',
+                    align: 'center'
+                }
+            ).setOrigin(0.5);
+        }
+    }
+
+    /**
+     * Handle player-enemy collision
+     */
+    handlePlayerEnemyCollision() {
+        if (!this.gameOver) {
+            this.gameOver = true;
+            this.player.sprite.setTint(0xff0000);
+            this.add.text(
+                this.scale.width / 2,
+                this.scale.height / 2,
+                'Caught by Enemy! Score: ' + this.score,
+                {
+                    fontSize: '48px',
+                    fill: '#fff',
+                    align: 'center'
+                }
+            ).setOrigin(0.5);
+        }
+    }
+
+    update(time, deltaTime) {
+        if (this.gameOver) return;
+
+        // Update player
+        if (this.player) {
+            this.player.update(deltaTime);
+        }
+
+        // Update enemy
+        if (this.enemy && this.player) {
+            this.enemy.update(deltaTime, this.player.getPosition());
+        }
+
+        // Move obstacles and recycle them
+        this.obstacles.children.entries.forEach(obstacle => {
+            obstacle.x -= 200 * (deltaTime / 1000);
+
+            // Recycle obstacle
+            if (obstacle.x < -50) {
+                obstacle.x = this.scale.width + 100;
+                if (this.player) {
+                    this.score += 10;
+                    this.scoreText.setText('Score: ' + this.score);
+                }
+            }
+        });
+
+        // Camera follow player
+        if (this.player) {
+            this.cameras.main.scrollX = Math.max(0, this.player.sprite.x - 150);
+        }
+    }
+}

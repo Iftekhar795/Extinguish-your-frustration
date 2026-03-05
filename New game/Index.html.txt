@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Endless Runner</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <!-- File upload UI -->
+    <div id="controls-panel" class="controls">
+        <h2>Sprite Upload</h2>
+        <div class="upload-section">
+            <label for="player-sprite">Player Sprite:</label>
+            <input type="file" id="player-sprite" accept="image/*">
+            <button id="load-player-btn">Load Player</button>
+        </div>
+        <div class="upload-section">
+            <label for="enemy-sprite">Enemy Sprite:</label>
+            <input type="file" id="enemy-sprite" accept="image/*">
+            <button id="load-enemy-btn">Load Enemy</button>
+        </div>
+        <div class="animation-settings">
+            <h3>Animation Settings</h3>
+            <label for="player-fps">Player FPS:</label>
+            <input type="number" id="player-fps" value="10" min="1" max="30">
+            <label for="enemy-fps">Enemy FPS:</label>
+            <input type="number" id="enemy-fps" value="10" min="1" max="30">
+            <button id="apply-settings-btn">Apply Settings</button>
+        </div>
+        <p id="status-message">Ready to load sprites...</p>
+    </div>
+
+    <script src="SpriteManager.js"></script>
+    <script src="PlayerController.js"></script>
+    <script src="EnemyAI.js"></script>
+    <script src="GameScene.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>

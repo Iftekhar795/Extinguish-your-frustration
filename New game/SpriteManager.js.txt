@@ -1,0 +1,175 @@
+/**
+ * SpriteManager.js
+ * Handles loading, storing, and managing custom sprite images
+ * Converts uploaded images to Phaser-compatible texture data
+ */
+
+class SpriteManager {
+    constructor() {
+        this.playerTexture = null;
+        this.enemyTexture = null;
+        this.playerImageData = null;
+        this.enemyImageData = null;
+        this.spriteConfigs = {
+            player: { width: 64, height: 64, frameWidth: 64, frameHeight: 64, frameCount: 1 },
+            enemy: { width: 64, height: 64, frameWidth: 64, frameHeight: 64, frameCount: 1 }
+        };
+    }
+
+    /**
+     * Load a custom image and convert it to a Phaser texture
+     * @param {File} imageFile - The image file to load
+     * @param {string} spriteType - 'player' or 'enemy'
+     * @param {Function} callback - Callback after loading (error, success)
+     */
+    loadCustomSprite(imageFile, spriteType, callback) {
+        if (!imageFile) {
+            callback(new Error('No file selected'), null);
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    // Store image dimensions
+                    const config = this.spriteConfigs[spriteType];
+                    config.width = img.width;
+                    config.height = img.height;
+
+                    // Create canvas and draw image
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    // Store the image data URL
+                    if (spriteType === 'player') {
+                        this.playerImageData = canvas.toDataURL();
+                        this.playerTexture = spriteType;
+                    } else if (spriteType === 'enemy') {
+                        this.enemyImageData = canvas.toDataURL();
+                        this.enemyTexture = spriteType;
+                    }
+
+                    callback(null, {
+                        type: spriteType,
+                        width: img.width,
+                        height: img.height,
+                        dataUrl: spriteType === 'player' ? this.playerImageData : this.enemyImageData
+                    });
+                } catch (error) {
+                    callback(error, null);
+                }
+            };
+
+            img.onerror = () => {
+                callback(new Error('Failed to load image'), null);
+            };
+
+            img.src = e.target.result;
+        };
+
+        reader.onerror = () => {
+            callback(new Error('Failed to read file'), null);
+        };
+
+        reader.readAsDataURL(imageFile);
+    }
+
+    /**
+     * Register textures with Phaser scene
+     * @param {Phaser.Scene} scene - The Phaser scene
+     */
+    registerTextures(scene) {
+        if (this.playerImageData) {
+            const img = new Image();
+            img.onload = () => {
+                const texture = scene.textures.createCanvas('player', img.width, img.height);
+                const ctx = texture.context;
+                ctx.drawImage(img, 0, 0);
+                texture.refresh();
+            };
+            img.src = this.playerImageData;
+        }
+
+        if (this.enemyImageData) {
+            const img = new Image();
+            img.onload = () => {
+                const texture = scene.textures.createCanvas('enemy', img.width, img.height);
+                const ctx = texture.context;
+                ctx.drawImage(img, 0, 0);
+                texture.refresh();
+            };
+            img.src = this.enemyImageData;
+        }
+    }
+
+    /**
+     * Create an animation from a sprite sheet or single image
+     * @param {Phaser.Scene} scene - The Phaser scene
+     * @param {string} spriteType - 'player' or 'enemy'
+     * @param {string} animationKey - Unique animation key
+     * @param {Object} config - Animation configuration
+     */
+    createAnimation(scene, spriteType, animationKey, config) {
+        const textureKey = spriteType;
+        const defaultConfig = {
+            frameCount: 4,
+            fps: 10,
+            repeat: -1
+        };
+
+        const animConfig = { ...defaultConfig, ...config };
+
+        if (!scene.anims.exists(animationKey)) {
+            scene.anims.create({
+                key: animationKey,
+                frames: scene.anims.generateFrameNumbers(textureKey, {
+                    start: config.startFrame || 0,
+                    end: (config.startFrame || 0) + animConfig.frameCount - 1
+                }),
+                frameRate: animConfig.fps,
+                repeat: animConfig.repeat
+            });
+        }
+    }
+
+    /**
+     * Update sprite configuration (dimensions, frame count, etc.)
+     * @param {string} spriteType - 'player' or 'enemy'
+     * @param {Object} config - New configuration
+     */
+    updateSpriteConfig(spriteType, config) {
+        if (this.spriteConfigs[spriteType]) {
+            this.spriteConfigs[spriteType] = {
+                ...this.spriteConfigs[spriteType],
+                ...config
+            };
+        }
+    }
+
+    /**
+     * Get sprite configuration
+     * @param {string} spriteType - 'player' or 'enemy'
+     * @returns {Object} Sprite configuration
+     */
+    getSpriteConfig(spriteType) {
+        return this.spriteConfigs[spriteType] || null;
+    }
+
+    /**
+     * Check if texture is loaded
+     * @param {string} spriteType - 'player' or 'enemy'
+     * @returns {boolean} True if texture is loaded
+     */
+    isTextureLoaded(spriteType) {
+        return spriteType === 'player' ? !!this.playerTexture : !!this.enemyTexture;
+    }
+}
+
+// Global instance
+const spriteManager = new SpriteManager();

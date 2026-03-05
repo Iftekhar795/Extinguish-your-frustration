@@ -1,0 +1,117 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 20px;
+}
+
+#game-container {
+    border: 3px solid #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    margin-bottom: 20px;
+}
+
+.controls {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 100%;
+}
+
+.controls h2 {
+    color: #333;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.controls h3 {
+    color: #555;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.upload-section {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.upload-section label {
+    font-weight: bold;
+    color: #333;
+}
+
+.upload-section input[type="file"] {
+    padding: 8px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.upload-section button,
+#apply-settings-btn {
+    padding: 10px 15px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.upload-section button:hover,
+#apply-settings-btn:hover {
+    background: #764ba2;
+}
+
+.animation-settings {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid #eee;
+}
+
+.animation-settings label {
+    display: inline-block;
+    width: 100px;
+    color: #333;
+    font-weight: bold;
+}
+
+.animation-settings input[type="number"] {
+    width: 80px;
+    padding: 5px;
+    margin-right: 15px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+#status-message {
+    margin-top: 20px;
+    padding: 10px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+#status-message.error {
+    background: #ffebee;
+    color: #c62828;
+}

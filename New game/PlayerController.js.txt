@@ -1,0 +1,138 @@
+/**
+ * PlayerController.js
+ * Handles player movement, jumping, and animations
+ */
+
+class PlayerController {
+    constructor(scene, x, y, spriteKey) {
+        this.scene = scene;
+        this.sprite = scene.add.sprite(x, y, spriteKey);
+        this.sprite.setScale(1.5);
+        
+        this.velocityX = 200; // Constant running speed
+        this.velocityY = 0;
+        this.jumpPower = -350; // Jump velocity
+        this.gravity = 600; // Gravity acceleration
+        this.isJumping = false;
+        this.isGrounded = false;
+        this.groundY = y;
+
+        // Animation state
+        this.currentAnimation = null;
+        this.animationFPS = 10;
+
+        this.setupInput();
+    }
+
+    /**
+     * Setup keyboard and pointer input
+     */
+    setupInput() {
+        this.scene.input.keyboard.on('keydown-SPACE', () => this.jump());
+        this.scene.input.keyboard.on('keydown-W', () => this.jump());
+        this.scene.input.keyboard.on('keydown-ARROW_UP', () => this.jump());
+        
+        // Mobile/mouse jump
+        this.scene.input.on('pointerdown', () => this.jump());
+    }
+
+    /**
+     * Perform a jump action
+     */
+    jump() {
+        if (this.isGrounded) {
+            this.velocityY = this.jumpPower;
+            this.isJumping = true;
+            this.isGrounded = false;
+            this.playAnimation('jump');
+        }
+    }
+
+    /**
+     * Play a specific animation
+     * @param {string} animationKey - Animation key to play
+     */
+    playAnimation(animationKey) {
+        if (this.currentAnimation !== animationKey) {
+            this.sprite.play(animationKey, true);
+            this.currentAnimation = animationKey;
+        }
+    }
+
+    /**
+     * Update player physics and position
+     * @param {number} deltaTime - Delta time since last frame
+     */
+    update(deltaTime) {
+        // Apply gravity
+        if (!this.isGrounded) {
+            this.velocityY += this.gravity * (deltaTime / 1000);
+        }
+
+        // Update Y position
+        this.sprite.y += this.velocityY * (deltaTime / 1000);
+
+        // Check ground collision
+        if (this.sprite.y >= this.groundY) {
+            this.sprite.y = this.groundY;
+            this.velocityY = 0;
+            this.isJumping = false;
+            this.isGrounded = true;
+            this.playAnimation('run');
+        }
+
+        // Move forward constantly
+        this.sprite.x += this.velocityX * (deltaTime / 1000);
+
+        // Check if player is out of bounds
+        if (this.sprite.x > this.scene.scale.width + 100) {
+            this.sprite.x = -100;
+        }
+    }
+
+    /**
+     * Set running speed
+     * @param {number} speed - New speed value
+     */
+    setSpeed(speed) {
+        this.velocityX = speed;
+    }
+
+    /**
+     * Set jump power
+     * @param {number} power - New jump power
+     */
+    setJumpPower(power) {
+        this.jumpPower = power;
+    }
+
+    /**
+     * Set animation FPS for smooth animation
+     * @param {number} fps - Frames per second
+     */
+    setAnimationFPS(fps) {
+        this.animationFPS = fps;
+        if (this.currentAnimation) {
+            const anim = this.scene.anims.get(this.currentAnimation);
+            if (anim) {
+                anim.frameRate = fps;
+            }
+        }
+    }
+
+    /**
+     * Get sprite bounds for collision detection
+     * @returns {Object} Bounds object with x, y, width, height
+     */
+    getBounds() {
+        return this.sprite.getBounds();
+    }
+
+    /**
+     * Get sprite position
+     * @returns {Object} Position object with x, y
+     */
+    getPosition() {
+        return { x: this.sprite.x, y: this.sprite.y };
+    }
+}
