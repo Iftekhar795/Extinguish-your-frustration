@@ -673,23 +673,60 @@ class Fighter {
         const torsoX  = x + bodyLeanX;
 
         // ── Legs ─────────────────────────────────────────────
-        const legColor = flashing ? 0xff3333 : this.pantsColor;
-        this._drawLeg(g, x - 8, hipY, legW, legH, leftLegAngle,  legColor);
-        this._drawLeg(g, x + 8, hipY, legW, legH, rightLegAngle, legColor);
+        const legColor  = flashing ? 0xff3333 : this.pantsColor;
+        // Derive boot color: darken the pants colour by ~45 %
+        const pantsRed   = ((this.pantsColor >> 16) & 0xff) * 0.55 | 0;
+        const pantsGreen = ((this.pantsColor >>  8) & 0xff) * 0.55 | 0;
+        const pantsBlue  = (this.pantsColor         & 0xff) * 0.55 | 0;
+        const bootColor = flashing ? 0xff3333 : ((pantsRed << 16) | (pantsGreen << 8) | pantsBlue);
+        this._drawLeg(g, x - 8, hipY, legW, legH, leftLegAngle,  legColor, bootColor);
+        this._drawLeg(g, x + 8, hipY, legW, legH, rightLegAngle, legColor, bootColor);
 
         // ── Torso ─────────────────────────────────────────────
         const torsoColor = flashing ? 0xff3333 : this.bodyColor;
+        const shW = 20;   // half-width at shoulders (top)
+        const waW = 14;   // half-width at waist (bottom)
 
-        // Shadow under torso for depth
-        g.fillStyle(0x000000, 0.18);
-        g.fillRoundedRect(torsoX - 17, torsoY + 3, 36, torsoH, 6);
+        // Drop shadow (offset 2 px down-right)
+        g.fillStyle(0x000000, 0.22);
+        g.beginPath();
+        g.moveTo(torsoX - shW + 2, torsoY + 2);
+        g.lineTo(torsoX + shW + 2, torsoY + 2);
+        g.lineTo(torsoX + waW + 2, torsoY + torsoH + 2);
+        g.lineTo(torsoX - waW + 2, torsoY + torsoH + 2);
+        g.closePath();
+        g.fillPath();
 
+        // Main trapezoid body – wider at shoulders, narrower at waist
         g.fillStyle(torsoColor, 1);
-        g.fillRoundedRect(torsoX - 18, torsoY, 36, torsoH, 6);
+        g.beginPath();
+        g.moveTo(torsoX - shW, torsoY);
+        g.lineTo(torsoX + shW, torsoY);
+        g.lineTo(torsoX + waW, torsoY + torsoH);
+        g.lineTo(torsoX - waW, torsoY + torsoH);
+        g.closePath();
+        g.fillPath();
 
-        // Subtle highlight stripe
-        g.fillStyle(0xffffff, 0.10);
-        g.fillRoundedRect(torsoX - 18, torsoY, 36, torsoH * 0.45, 6);
+        // Upper-chest highlight (catches light from above)
+        g.fillStyle(0xffffff, 0.13);
+        g.beginPath();
+        g.moveTo(torsoX - shW, torsoY);
+        g.lineTo(torsoX + shW, torsoY);
+        g.lineTo(torsoX + waW + (shW - waW) * 0.5, torsoY + torsoH * 0.46);
+        g.lineTo(torsoX - waW - (shW - waW) * 0.5, torsoY + torsoH * 0.46);
+        g.closePath();
+        g.fillPath();
+
+        // Belt / waist band
+        const beltFrac  = 0.80;
+        const beltY     = torsoY + torsoH * beltFrac;
+        const beltHalfW = waW + (shW - waW) * (1 - beltFrac);
+        g.fillStyle(0x000000, 0.30);
+        g.fillRect(torsoX - beltHalfW, beltY, beltHalfW * 2, torsoH * 0.16);
+
+        // Collar / neckline detail at top
+        g.fillStyle(0x000000, 0.20);
+        g.fillRoundedRect(torsoX - 8, torsoY, 16, 9, 3);
 
         // ── Special: Hadouken energy glow around hands ───────
         if (this.state === 'special') {
@@ -752,6 +789,15 @@ class Fighter {
         const armH     = 30;
         const shoulderY = torsoY + 4;
 
+        // Shoulder caps (drawn behind arms so arms appear to come out of them)
+        g.fillStyle(flashing ? 0xff3333 : this.bodyColor, 1);
+        g.fillCircle(torsoX - 18, shoulderY, 10);
+        g.fillCircle(torsoX + 18, shoulderY, 10);
+        // Darker dimple for depth
+        g.fillStyle(0x000000, 0.22);
+        g.fillCircle(torsoX - 18, shoulderY + 3, 5);
+        g.fillCircle(torsoX + 18, shoulderY + 3, 5);
+
         this._drawArm(g, torsoX - 18, shoulderY, armW, armH, leftArmAngle,  armColor);
         this._drawArm(g, torsoX + 18, shoulderY, armW, armH, rightArmAngle, armColor);
 
@@ -789,6 +835,11 @@ class Fighter {
         // ── Head ─────────────────────────────────────────────
         const headCX = torsoX + headOffX;
         const headCY = torsoY - Fighter.HEAD_RADIUS - 2 + headOffY;
+
+        // Neck connecting head to torso
+        const neckColor = flashing ? 0xff3333 : this.skinColor;
+        g.fillStyle(neckColor, 1);
+        g.fillRoundedRect(headCX - 5, torsoY - 11, 10, 13, 2);
 
         if (this.faceImage) {
             this.faceImage.setPosition(headCX, headCY);
@@ -861,22 +912,35 @@ class Fighter {
     }
 
     /** Draw a single leg rotated around its attachment point */
-    _drawLeg(g, baseX, topY, w, h, angle, color) {
-        g.fillStyle(color, 1);
+    _drawLeg(g, baseX, topY, w, h, angle, color, bootColor) {
         g.save();
         g.translateCanvas(baseX, topY);
         g.rotateCanvas(angle);
+        // Main leg (thigh + shin)
+        g.fillStyle(color, 1);
         g.fillRoundedRect(-w / 2, 0, w, h, 3);
+        // Shin highlight for depth
+        g.fillStyle(0xffffff, 0.10);
+        g.fillRoundedRect(-w / 2 + 2, 2, w / 2, h * 0.65, 2);
+        // Boot / shoe at the foot end
+        if (bootColor !== undefined) {
+            g.fillStyle(bootColor, 1);
+            g.fillRoundedRect(-(w + 4) / 2, h - 7, w + 4, 9, 3);
+        }
         g.restore();
     }
 
     /** Draw a single arm rotated around its attachment point */
     _drawArm(g, baseX, topY, w, h, angle, color) {
-        g.fillStyle(color, 1);
         g.save();
         g.translateCanvas(baseX, topY);
         g.rotateCanvas(angle);
-        g.fillRoundedRect(-w / 2, 0, w, h, 3);
+        // Arm body
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(-w / 2, 0, w, h, 4);
+        // Highlight strip (gives cylindrical look)
+        g.fillStyle(0xffffff, 0.18);
+        g.fillRoundedRect(-w / 2 + 2, 2, w / 2 - 1, h * 0.62, 3);
         g.restore();
     }
 

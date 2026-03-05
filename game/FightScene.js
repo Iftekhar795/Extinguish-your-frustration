@@ -81,6 +81,16 @@ class FightScene extends Phaser.Scene {
         this._enemyConfig  = cfg.enemyConfig   || {};
         this._arenaIdx     = cfg.arenaIndex    !== undefined ? cfg.arenaIndex  : 0;
         this._difficulty   = cfg.difficulty    !== undefined ? cfg.difficulty   : 1;
+
+        // Reset all per-session state so that scene.restart() (rematch) works correctly.
+        // The constructor is NOT re-called on restart, so this is the only safe reset point.
+        this._round       = 1;
+        this._playerWins  = 0;
+        this._enemyWins   = 0;
+        this._roundOver   = false;
+        this._gameOver    = false;
+        this._roundTimer  = 99;
+        this._timerAccum  = 0;
     }
 
     create() {
@@ -223,16 +233,160 @@ class FightScene extends Phaser.Scene {
 
     _drawArenaDetails(W, groundY, a) {
         const g = this.add.graphics();
-        // Simple silhouette buildings / pillars giving depth
-        g.fillStyle(0x000000, 0.22);
-        const bh = groundY * 0.4;
-        // Left building
-        g.fillRect(0, groundY - bh, W * 0.18, bh);
-        // Right building
-        g.fillRect(W - W * 0.15, groundY - bh * 0.75, W * 0.15, bh * 0.75);
-        // Centre arch hint
-        g.fillStyle(a.accentColor, 0.06);
-        g.fillCircle(W / 2, groundY, W * 0.42);
+
+        if (a.name === 'Steel Factory') {
+            // ── Far background structures ────────────────────
+            g.fillStyle(0x080818, 0.70);
+            // Large left factory block
+            g.fillRect(0, groundY - groundY * 0.68, W * 0.20, groundY * 0.68);
+            // Right block
+            g.fillRect(W * 0.82, groundY - groundY * 0.52, W * 0.18, groundY * 0.52);
+            // Small centre building
+            g.fillStyle(0x0c0c22, 0.55);
+            g.fillRect(W * 0.42, groundY - groundY * 0.32, W * 0.16, groundY * 0.32);
+
+            // ── Smoke stacks ─────────────────────────────────
+            g.fillStyle(0x111122, 0.85);
+            [[W * 0.08, groundY * 0.50], [W * 0.16, groundY * 0.62], [W * 0.86, groundY * 0.44]].forEach(([sx, sh]) => {
+                g.fillRect(sx - 5, groundY - sh, 10, sh);
+                g.fillStyle(0x1a1a33, 0.85);
+                g.fillEllipse(sx, groundY - sh, 14, 7);
+                g.fillStyle(0x111122, 0.85);
+            });
+
+            // ── Overhead girder / pipe ────────────────────────
+            g.fillStyle(0x222233, 0.80);
+            g.fillRect(0, groundY * 0.20, W, 5);
+            // Vertical supports
+            for (let i = 0; i <= 5; i++) {
+                g.fillRect(W * i / 5 - 2, groundY * 0.14, 4, groundY * 0.08);
+            }
+
+            // ── Glowing industrial windows ────────────────────
+            g.fillStyle(a.accentColor, 0.18);
+            for (let i = 0; i < 3; i++) {
+                g.fillRect(W * 0.02 + i * W * 0.055, groundY * 0.46, W * 0.04, groundY * 0.08);
+            }
+            g.fillStyle(a.accentColor, 0.09);
+            for (let i = 0; i < 2; i++) {
+                g.fillRect(W * 0.85 + i * W * 0.06, groundY * 0.36, W * 0.04, groundY * 0.07);
+            }
+
+            // ── Audience silhouettes ──────────────────────────
+            this._drawAudience(g, W, groundY, 0x080810, 0.75);
+
+        } else if (a.name === 'Sunset Dojo') {
+            // ── Distant mountain layers ───────────────────────
+            // Far mountains (lighter)
+            g.fillStyle(0x1a0a3a, 0.45);
+            [[0, 0.50, W * 0.35], [W * 0.30, 0.38, W * 0.30], [W * 0.58, 0.46, W * 0.28], [W * 0.80, 0.35, W * 0.25]].forEach(([mx, mh, mw]) => {
+                g.beginPath(); g.moveTo(mx, groundY);
+                g.lineTo(mx + mw / 2, groundY - groundY * mh);
+                g.lineTo(mx + mw, groundY); g.closePath(); g.fillPath();
+            });
+            // Closer mountains (darker)
+            g.fillStyle(0x100525, 0.60);
+            [[W * 0.55, 0.42, W * 0.22], [W * 0.75, 0.34, W * 0.28]].forEach(([mx, mh, mw]) => {
+                g.beginPath(); g.moveTo(mx, groundY);
+                g.lineTo(mx + mw / 2, groundY - groundY * mh);
+                g.lineTo(mx + mw, groundY); g.closePath(); g.fillPath();
+            });
+
+            // ── Torii gate (left of centre) ───────────────────
+            g.fillStyle(0x5a0000, 0.75);
+            const tX = W * 0.20;
+            g.fillRect(tX - W * 0.058, groundY - groundY * 0.40, W * 0.116, groundY * 0.04); // top beam curve hint
+            g.fillRect(tX - W * 0.10,  groundY - groundY * 0.33, W * 0.20,  groundY * 0.04); // lower cross-beam
+            g.fillRect(tX - W * 0.084, groundY - groundY * 0.31, W * 0.012, groundY * 0.31); // left pillar
+            g.fillRect(tX + W * 0.072, groundY - groundY * 0.31, W * 0.012, groundY * 0.31); // right pillar
+
+            // ── Pagoda silhouette (right of centre) ───────────
+            g.fillStyle(0x0d041e, 0.70);
+            const pX = W * 0.76;
+            [[0.14, 0.80], [0.11, 0.62], [0.08, 0.44]].forEach(([tw, ty]) => {
+                g.fillRect(pX - W * tw / 2, groundY - groundY * ty, W * tw, groundY * 0.055);
+            });
+            g.fillRect(pX - W * 0.014, groundY - groundY * 0.44, W * 0.028, groundY * 0.44);
+
+            // ── Hanging lanterns ─────────────────────────────
+            [[W * 0.12, groundY * 0.26], [W * 0.36, groundY * 0.20], [W * 0.64, groundY * 0.28]].forEach(([lx, ly]) => {
+                g.fillStyle(a.accentColor, 0.40);
+                g.fillEllipse(lx, ly, 11, 17);
+                g.fillStyle(0xFFD700, 0.20);
+                g.fillCircle(lx, ly, 7);
+                // String
+                g.lineStyle(1, a.accentColor, 0.30);
+                g.beginPath(); g.moveTo(lx, ly - 9); g.lineTo(lx, ly - 22); g.strokePath();
+            });
+
+            // ── Audience silhouettes ──────────────────────────
+            this._drawAudience(g, W, groundY, 0x0a0218, 0.80);
+
+        } else {
+            // ── Arctic Peak ───────────────────────────────────
+
+            // Aurora curtains (semi-transparent overlapping ellipses)
+            [
+                [W * 0.15, 0x00FF99, 0.05],
+                [W * 0.50, 0x0099FF, 0.04],
+                [W * 0.85, 0x44FFCC, 0.04],
+            ].forEach(([cx, col, al]) => {
+                for (let i = 0; i < 4; i++) {
+                    g.fillStyle(col, al);
+                    g.fillEllipse(cx + (i - 1.5) * W * 0.08, groundY * (0.14 + i * 0.05), W * (0.70 - i * 0.08), groundY * (0.20 - i * 0.02));
+                }
+            });
+
+            // ── Far mountain silhouettes ─────────────────────
+            g.fillStyle(0x071529, 0.82);
+            [[0, 0.66, W * 0.30], [W * 0.22, 0.50, W * 0.26], [W * 0.52, 0.58, W * 0.28], [W * 0.76, 0.43, W * 0.26]].forEach(([mx, mh, mw]) => {
+                g.beginPath(); g.moveTo(mx, groundY);
+                g.lineTo(mx + mw / 2, groundY - groundY * mh);
+                g.lineTo(mx + mw, groundY); g.closePath(); g.fillPath();
+                // Snow cap
+                g.fillStyle(0xDDE8FF, 0.60);
+                g.beginPath();
+                g.moveTo(mx + mw * 0.30, groundY - groundY * mh * 0.66);
+                g.lineTo(mx + mw / 2, groundY - groundY * mh);
+                g.lineTo(mx + mw * 0.70, groundY - groundY * mh * 0.66);
+                g.closePath(); g.fillPath();
+                g.fillStyle(0x071529, 0.82);
+            });
+
+            // ── Ice formations at stage edges ────────────────
+            g.fillStyle(a.accentColor, 0.22);
+            for (let i = 0; i < 5; i++) {
+                // Left icicles
+                const ix = W * (i / 12);
+                g.beginPath(); g.moveTo(ix, groundY);
+                g.lineTo(ix + W * 0.035, groundY - groundY * (0.07 + Math.sin(i * 1.3) * 0.04));
+                g.lineTo(ix + W * 0.07, groundY); g.closePath(); g.fillPath();
+                // Right icicles
+                const rx = W - W * (i / 12);
+                g.beginPath(); g.moveTo(rx, groundY);
+                g.lineTo(rx - W * 0.035, groundY - groundY * (0.06 + Math.sin(i * 1.7) * 0.04));
+                g.lineTo(rx - W * 0.07, groundY); g.closePath(); g.fillPath();
+            }
+
+            // ── Audience silhouettes ──────────────────────────
+            this._drawAudience(g, W, groundY, 0x040e1a, 0.80);
+        }
+    }
+
+    /** Audience silhouette row on the left and right edges of the stage */
+    _drawAudience(g, W, groundY, color, alpha) {
+        g.fillStyle(color, alpha);
+        const spacing = W / 20;
+        for (let i = 0; i < 20; i++) {
+            const hx = spacing * (i + 0.5);
+            // Skip the central fighting area
+            if (hx > W * 0.16 && hx < W * 0.84) continue;
+            const jitter = Math.sin(i * 1.9) * 3;
+            // Head
+            g.fillCircle(hx, groundY - 8 + jitter, 6);
+            // Body
+            g.fillRect(hx - 5, groundY - 2, 10, 10);
+        }
     }
 
     _drawClouds(W, H, color) {
