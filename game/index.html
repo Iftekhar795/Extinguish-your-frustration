@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Endless Runner</title>
-    <!-- Phaser 3 — local copy (CDN fallback via dynamic insertion) -->
+    <title>Boxing Fighter — Extinguish Your Frustration</title>
+    <!-- Phaser 3 — local copy (CDN fallback) -->
     <script src="phaser.min.js"></script>
     <script>
         if (typeof Phaser === 'undefined') {
@@ -17,19 +17,22 @@
 </head>
 <body>
 
-    <!-- ── Phaser canvas lives here ─────────────────────────────────────── -->
+    <!-- ── Phaser canvas ─────────────────────────────────────────────────── -->
     <div id="game-container"></div>
 
     <!-- ── Upload / settings panel ──────────────────────────────────────── -->
     <div id="controls-panel" class="controls">
 
-        <h2>🎮 Sprite Upload</h2>
+        <h2>🥊 Fighter Setup</h2>
 
-        <!-- Player sprite upload -->
+        <!-- Player 1 photo upload -->
         <div class="upload-section">
-            <label for="player-sprite">Player Sprite</label>
+            <label for="player-sprite">Player 1 Photo</label>
             <input type="file" id="player-sprite" accept="image/*">
-
+            <p class="sheet-config-hint">
+                📸 Upload any portrait photo — your face is
+                <strong>auto-detected</strong> and placed on the fighter!
+            </p>
             <div class="sheet-config">
                 <label>Frame&nbsp;W:
                     <input type="number" id="player-fw" value="0" min="0" max="512">
@@ -41,16 +44,18 @@
                     <input type="number" id="player-frames" value="1" min="1" max="64">
                 </label>
             </div>
-            <p class="sheet-config-hint">Leave Frame W/H at 0 for a single image.</p>
-
-            <button id="load-player-btn">Load Player Sprite</button>
+            <p class="sheet-config-hint">
+                Leave Frame W/H at 0 for auto face-detection.<br>
+                Set Frame W/H &gt; 0 to use a sprite sheet instead.
+            </p>
+            <button id="load-player-btn">Load Player Photo</button>
         </div>
 
-        <!-- Enemy sprite upload -->
+        <!-- CPU photo upload -->
         <div class="upload-section">
-            <label for="enemy-sprite">Enemy Sprite</label>
+            <label for="enemy-sprite">CPU Opponent Photo</label>
             <input type="file" id="enemy-sprite" accept="image/*">
-
+            <p class="sheet-config-hint">📸 Upload your nemesis's photo!</p>
             <div class="sheet-config">
                 <label>Frame&nbsp;W:
                     <input type="number" id="enemy-fw" value="0" min="0" max="512">
@@ -62,38 +67,45 @@
                     <input type="number" id="enemy-frames" value="1" min="1" max="64">
                 </label>
             </div>
-            <p class="sheet-config-hint">For a sprite sheet, set Frame W, H and the total frame count.</p>
-
-            <button id="load-enemy-btn">Load Enemy Sprite</button>
+            <p class="sheet-config-hint">
+                For a sprite sheet, set Frame W, H and total frame count.
+            </p>
+            <button id="load-enemy-btn">Load CPU Photo</button>
         </div>
 
-        <!-- Animation FPS -->
+        <!-- Advanced / sprite-sheet FPS settings -->
         <div class="animation-settings">
-            <h3>Animation Settings</h3>
+            <h3>Advanced Settings</h3>
             <div class="fps-row">
                 <label for="player-fps">Player FPS:</label>
                 <input type="number" id="player-fps" value="10" min="1" max="60">
             </div>
             <div class="fps-row">
-                <label for="enemy-fps">Enemy FPS:</label>
+                <label for="enemy-fps">CPU FPS:</label>
                 <input type="number" id="enemy-fps" value="10" min="1" max="60">
             </div>
-            <button id="apply-settings-btn">Apply Settings</button>
+            <button id="apply-settings-btn">Apply</button>
         </div>
 
-        <!-- Controls reference -->
+        <!-- Controls quick-reference -->
         <div class="controls-info">
-            ↑ &nbsp;/&nbsp; W &nbsp;/&nbsp; Space &nbsp;/&nbsp; Tap — Jump
-            <br>
-            R &nbsp;/&nbsp; Tap after game-over — Restart
+            <strong>Player 1 Controls</strong>
+            <kbd>A</kbd> / <kbd>←</kbd> &nbsp;·&nbsp; <kbd>D</kbd> / <kbd>→</kbd> &nbsp;— Walk<br>
+            <kbd>W</kbd> / <kbd>↑</kbd> &nbsp;— Jump<br>
+            <kbd>S</kbd> &nbsp;— Block <em>(hold)</em><br>
+            <kbd>J</kbd> / <kbd>Z</kbd> &nbsp;— Punch<br>
+            <kbd>K</kbd> / <kbd>X</kbd> &nbsp;— Kick<br>
+            <kbd>R</kbd> &nbsp;— Restart
         </div>
 
         <!-- Status feedback -->
-        <p id="status-message">Ready — upload sprites or play with the default characters.</p>
+        <p id="status-message">
+            Ready! Upload photos or fight with the default characters.
+        </p>
 
     </div><!-- /.controls -->
 
-    <!-- Game scripts (order matters) -->
+    <!-- Game scripts — order matters -->
     <script src="SpriteManager.js"></script>
     <script src="PlayerController.js"></script>
     <script src="EnemyAI.js"></script>
