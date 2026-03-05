@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Endless Runner</title>
+    <!-- Phaser 3 — local copy (CDN fallback via dynamic insertion) -->
+    <script src="phaser.min.js"></script>
+    <script>
+        if (typeof Phaser === 'undefined') {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js';
+            document.head.appendChild(s);
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ── Phaser canvas lives here ─────────────────────────────────────── -->
+    <div id="game-container"></div>
+
+    <!-- ── Upload / settings panel ──────────────────────────────────────── -->
+    <div id="controls-panel" class="controls">
+
+        <h2>🎮 Sprite Upload</h2>
+
+        <!-- Player sprite upload -->
+        <div class="upload-section">
+            <label for="player-sprite">Player Sprite</label>
+            <input type="file" id="player-sprite" accept="image/*">
+
+            <div class="sheet-config">
+                <label>Frame&nbsp;W:
+                    <input type="number" id="player-fw" value="0" min="0" max="512">
+                </label>
+                <label>Frame&nbsp;H:
+                    <input type="number" id="player-fh" value="0" min="0" max="512">
+                </label>
+                <label>Frames:
+                    <input type="number" id="player-frames" value="1" min="1" max="64">
+                </label>
+            </div>
+            <p class="sheet-config-hint">Leave Frame W/H at 0 for a single image.</p>
+
+            <button id="load-player-btn">Load Player Sprite</button>
+        </div>
+
+        <!-- Enemy sprite upload -->
+        <div class="upload-section">
+            <label for="enemy-sprite">Enemy Sprite</label>
+            <input type="file" id="enemy-sprite" accept="image/*">
+
+            <div class="sheet-config">
+                <label>Frame&nbsp;W:
+                    <input type="number" id="enemy-fw" value="0" min="0" max="512">
+                </label>
+                <label>Frame&nbsp;H:
+                    <input type="number" id="enemy-fh" value="0" min="0" max="512">
+                </label>
+                <label>Frames:
+                    <input type="number" id="enemy-frames" value="1" min="1" max="64">
+                </label>
+            </div>
+            <p class="sheet-config-hint">For a sprite sheet, set Frame W, H and the total frame count.</p>
+
+            <button id="load-enemy-btn">Load Enemy Sprite</button>
+        </div>
+
+        <!-- Animation FPS -->
+        <div class="animation-settings">
+            <h3>Animation Settings</h3>
+            <div class="fps-row">
+                <label for="player-fps">Player FPS:</label>
+                <input type="number" id="player-fps" value="10" min="1" max="60">
+            </div>
+            <div class="fps-row">
+                <label for="enemy-fps">Enemy FPS:</label>
+                <input type="number" id="enemy-fps" value="10" min="1" max="60">
+            </div>
+            <button id="apply-settings-btn">Apply Settings</button>
+        </div>
+
+        <!-- Controls reference -->
+        <div class="controls-info">
+            ↑ &nbsp;/&nbsp; W &nbsp;/&nbsp; Space &nbsp;/&nbsp; Tap — Jump
+            <br>
+            R &nbsp;/&nbsp; Tap after game-over — Restart
+        </div>
+
+        <!-- Status feedback -->
+        <p id="status-message">Ready — upload sprites or play with the default characters.</p>
+
+    </div><!-- /.controls -->
+
+    <!-- Game scripts (order matters) -->
+    <script src="SpriteManager.js"></script>
+    <script src="PlayerController.js"></script>
+    <script src="EnemyAI.js"></script>
+    <script src="GameScene.js"></script>
+    <script src="main.js"></script>
+
+</body>
+</html>

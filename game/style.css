@@ -1,0 +1,211 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   style.css  —  2D Endless Runner
+   ───────────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Page background */
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6a4f 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    padding: 24px 16px;
+}
+
+/* ── Game canvas wrapper ─────────────────────────────────────────────────── */
+#game-container {
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.25);
+}
+
+/* ── Control panel ───────────────────────────────────────────────────────── */
+.controls {
+    background: rgba(255, 255, 255, 0.97);
+    padding: 24px 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    width: 300px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.controls h2 {
+    font-size: 20px;
+    color: #1e3a5f;
+    text-align: center;
+    margin-bottom: 4px;
+}
+
+/* ── Upload section ──────────────────────────────────────────────────────── */
+.upload-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.upload-section > label {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1e3a5f;
+}
+
+.upload-section input[type="file"] {
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px dashed #94a3b8;
+    border-radius: 5px;
+    padding: 6px;
+    background: #fff;
+}
+
+/* Sprite sheet configuration row */
+.sheet-config {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.sheet-config label {
+    font-size: 12px;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.sheet-config input[type="number"] {
+    width: 52px;
+    padding: 3px 5px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.sheet-config-hint {
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* Load button */
+.upload-section button {
+    padding: 9px 12px;
+    background: #2563EB;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.upload-section button:hover  { background: #1d4ed8; }
+.upload-section button:active { transform: scale(0.97); }
+
+/* ── Animation settings ──────────────────────────────────────────────────── */
+.animation-settings {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.animation-settings h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fps-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #374151;
+}
+
+.fps-row label { flex: 1; font-weight: 600; }
+
+.fps-row input[type="number"] {
+    width: 60px;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+#apply-settings-btn {
+    padding: 8px 12px;
+    background: #059669;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+    transition: background 0.2s ease;
+    align-self: flex-start;
+}
+#apply-settings-btn:hover { background: #047857; }
+
+/* ── Controls info ───────────────────────────────────────────────────────── */
+.controls-info {
+    background: #eff6ff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #1e40af;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* ── Status message ──────────────────────────────────────────────────────── */
+#status-message {
+    padding: 10px 12px;
+    background: #dcfce7;
+    color: #166534;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.5;
+}
+
+#status-message.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* ── Responsive stacking ─────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+    body {
+        flex-direction: column;
+        align-items: center;
+    }
+    .controls { width: 100%; max-width: 680px; }
+}
