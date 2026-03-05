@@ -85,14 +85,18 @@ function readUrlParams() {
 }
 
 function applyUrlParams(p) {
-    if (p.playerName)  { const el = qs('#player-name');    if (el) el.value = p.playerName;  }
-    if (p.playerBody)  { const el = qs('#player-body');    if (el) el.value = '#' + parseInt(p.playerBody).toString(16).padStart(6, '0'); }
-    if (p.playerPants) { const el = qs('#player-pants');   if (el) el.value = '#' + parseInt(p.playerPants).toString(16).padStart(6, '0'); }
-    if (p.enemyName)   { const el = qs('#enemy-name');     if (el) el.value = p.enemyName;   }
-    if (p.enemyBody)   { const el = qs('#enemy-body');     if (el) el.value = '#' + parseInt(p.enemyBody).toString(16).padStart(6, '0'); }
-    if (p.enemyPants)  { const el = qs('#enemy-pants');    if (el) el.value = '#' + parseInt(p.enemyPants).toString(16).padStart(6, '0'); }
-    if (p.arena)       { const el = qs('#arena-select');   if (el) el.value = p.arena;       }
-    if (p.difficulty)  { const el = qs('#difficulty');     if (el) el.value = p.difficulty;  }
+    /** Convert a stored integer colour value back to a CSS hex string */
+    function intToHexColor(val) {
+        return '#' + parseInt(val).toString(16).padStart(6, '0');
+    }
+    if (p.playerName)  { const el = qs('#player-name');    if (el) el.value = p.playerName;              }
+    if (p.playerBody)  { const el = qs('#player-body');    if (el) el.value = intToHexColor(p.playerBody);  }
+    if (p.playerPants) { const el = qs('#player-pants');   if (el) el.value = intToHexColor(p.playerPants); }
+    if (p.enemyName)   { const el = qs('#enemy-name');     if (el) el.value = p.enemyName;               }
+    if (p.enemyBody)   { const el = qs('#enemy-body');     if (el) el.value = intToHexColor(p.enemyBody);   }
+    if (p.enemyPants)  { const el = qs('#enemy-pants');    if (el) el.value = intToHexColor(p.enemyPants);  }
+    if (p.arena)       { const el = qs('#arena-select');   if (el) el.value = p.arena;                   }
+    if (p.difficulty)  { const el = qs('#difficulty');     if (el) el.value = p.difficulty;               }
 }
 
 // ── Start fight ──────────────────────────────────────────────
@@ -140,6 +144,7 @@ function startFight() {
     } else {
         game.scene.start('FightScene', { playerConfig, enemyConfig, arenaIndex, difficulty });
     }
+}
 
 // ── Wire up DOM ───────────────────────────────────────────────
 

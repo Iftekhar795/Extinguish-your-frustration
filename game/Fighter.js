@@ -57,7 +57,6 @@ class Fighter {
             kick:    { damage: 15, duration: 380, hitWindow: [100, 320], range: 80  },
             special: { damage: 28, duration: 550, hitWindow: [150, 480], range: 100 },
         };
-        // Valid states: 'idle' | 'walking' | 'jumping' | 'punch' | 'kick' | 'blocking' | 'special' | 'hit' | 'ko'
 
         // Whether an active attack has already landed (prevent multi-hit per swing)
         this._attackHit = false;
