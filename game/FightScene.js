@@ -280,33 +280,44 @@ class FightScene extends Phaser.Scene {
             strokeThickness: 3,
         }).setOrigin(0.5, 0).setAlpha(0);
 
-        // Controls hint
-        this.add.text(W / 2, this.scale.height - 18,
+        // Controls hint – keyboard shortcuts, hidden on touch devices
+        const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        this._controlsHint = this.add.text(W / 2, this.scale.height - 18,
             '← → Move  ↑ Jump  Z Punch  X Kick  C Block  V Special', {
             fontSize: '11px', fontFamily: 'Arial', color: '#888888',
-        }).setOrigin(0.5, 1);
+        }).setOrigin(0.5, 1).setVisible(!isMobile);
 
         this._barW = barW;
         this._barH = barH;
         this._barY = barY;
+
+        // Cache previous HP ratios to avoid unnecessary redraws
+        this._prevPlayerHpRatio = -1;
+        this._prevEnemyHpRatio  = -1;
     }
 
     _updateHUD(delta) {
         const W = this.scale.width;
 
-        // Player HP
+        // Player HP – only redraw when ratio changes
         const pRatio = this.player.hp / this.player.maxHp;
-        this._playerHpFill.clear();
-        this._playerHpFill.fillStyle(this._hpColor(pRatio), 1);
-        this._playerHpFill.fillRoundedRect(10, this._barY, this._barW * pRatio, this._barH, 4);
+        if (pRatio !== this._prevPlayerHpRatio) {
+            this._playerHpFill.clear();
+            this._playerHpFill.fillStyle(this._hpColor(pRatio), 1);
+            this._playerHpFill.fillRoundedRect(10, this._barY, this._barW * pRatio, this._barH, 4);
+            this._prevPlayerHpRatio = pRatio;
+        }
 
-        // Enemy HP
+        // Enemy HP – only redraw when ratio changes
         const eRatio = this.enemy.hp / this.enemy.maxHp;
-        this._enemyHpFill.clear();
-        this._enemyHpFill.fillStyle(this._hpColor(eRatio), 1);
-        const eBarX = W - 10 - this._barW;
-        const eBarW = this._barW * eRatio;
-        this._enemyHpFill.fillRoundedRect(eBarX + (this._barW - eBarW), this._barY, eBarW, this._barH, 4);
+        if (eRatio !== this._prevEnemyHpRatio) {
+            this._enemyHpFill.clear();
+            this._enemyHpFill.fillStyle(this._hpColor(eRatio), 1);
+            const eBarX = W - 10 - this._barW;
+            const eBarW = this._barW * eRatio;
+            this._enemyHpFill.fillRoundedRect(eBarX + (this._barW - eBarW), this._barY, eBarW, this._barH, 4);
+            this._prevEnemyHpRatio = eRatio;
+        }
 
         // Timer
         this._timerAccum += delta;
@@ -361,51 +372,54 @@ class FightScene extends Phaser.Scene {
     }
 
     _handleInput(delta) {
-        const k = this._keys;
-        const p = this.player;
+        const k  = this._keys;
+        const mi = window._mobileInput || {};
+        const p  = this.player;
 
-        // Movement
-        if (k.left.isDown && !k.right.isDown) {
-            p.move(-1);
-        } else if (k.right.isDown && !k.left.isDown) {
-            p.move(1);
-        } else {
-            p.move(0);
-        }
+        // Movement (keyboard OR mobile d-pad)
+        const goLeft  = (k.left.isDown  && !k.right.isDown) || (mi.left  && !mi.right);
+        const goRight = (k.right.isDown && !k.left.isDown)  || (mi.right && !mi.left);
+        if      (goLeft)  p.move(-1);
+        else if (goRight) p.move(1);
+        else              p.move(0);
 
         // Jump
-        if (Phaser.Input.Keyboard.JustDown(k.up)) {
+        if (Phaser.Input.Keyboard.JustDown(k.up) || mi.jumpJustDown) {
             p.jump();
+            mi.jumpJustDown = false;
         }
 
         // Block
-        p.setBlocking(k.block.isDown);
+        p.setBlocking(k.block.isDown || !!mi.block);
 
         // Punch (just pressed)
-        if (Phaser.Input.Keyboard.JustDown(k.punch)) {
+        if (Phaser.Input.Keyboard.JustDown(k.punch) || mi.punchJustDown) {
             if (p.punch()) {
                 this.enemy.recordPlayerAttack('punch');
                 this._checkPlayerCombo();
             }
+            mi.punchJustDown = false;
         }
 
         // Kick (just pressed)
-        if (Phaser.Input.Keyboard.JustDown(k.kick)) {
+        if (Phaser.Input.Keyboard.JustDown(k.kick) || mi.kickJustDown) {
             if (p.kick()) {
                 this.enemy.recordPlayerAttack('kick');
                 this._checkPlayerCombo();
             }
+            mi.kickJustDown = false;
         }
 
         // Special (charge while held, release to fire)
-        if (k.special.isDown) {
+        if (k.special.isDown || mi.specialDown) {
             p.chargeSpecial(delta);
         }
-        if (Phaser.Input.Keyboard.JustUp(k.special)) {
+        if (Phaser.Input.Keyboard.JustUp(k.special) || mi.specialJustUp) {
             if (p.getSpecialCharge() >= 50) {
                 p.special();
                 this.enemy.recordPlayerAttack('special');
             }
+            mi.specialJustUp = false;
         }
     }
 
@@ -596,11 +610,13 @@ class FightScene extends Phaser.Scene {
         this.player.y   = this._groundY;
         this.player.hp  = this.player.maxHp;
         this.player._enterState('idle', 0);
+        this._prevPlayerHpRatio = -1; // force HP bar redraw
 
         this.enemy.x    = W - 160;
         this.enemy.y    = this._groundY;
         this.enemy.hp   = this.enemy.maxHp;
         this.enemy._enterState('idle', 0);
+        this._prevEnemyHpRatio = -1; // force HP bar redraw
 
         this._roundTimer = 99;
         this._timerText.setText('99').setColor('#ffffff');

@@ -28,6 +28,18 @@ const phaserConfig = {
 
 let game = null;  // created when fight starts
 
+// ── Mobile input state (shared with FightScene) ───────────────
+window._mobileInput = {
+    left:         false,
+    right:        false,
+    jumpJustDown: false,
+    punchJustDown: false,
+    kickJustDown:  false,
+    block:        false,
+    specialDown:  false,
+    specialJustUp: false,
+};
+
 // ── DOM helpers ──────────────────────────────────────────────
 
 function qs(sel) { return document.querySelector(sel); }
@@ -42,6 +54,72 @@ function setStatus(msg, isError = false) {
 function hexToInt(hexStr, fallback) {
     const n = parseInt(hexStr.replace('#', ''), 16);
     return isNaN(n) ? fallback : n;
+}
+
+// ── Touch device detection ────────────────────────────────────
+
+function isTouchDevice() {
+    return ('ontouchstart' in window) ||
+           navigator.maxTouchPoints > 0 ||
+           window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+}
+
+// ── Mobile virtual controls ───────────────────────────────────
+
+/**
+ * Wire up the on-screen mobile buttons.
+ * Each button sets/clears flags in window._mobileInput so FightScene can
+ * read them in _handleInput() just like keyboard keys.
+ */
+function setupMobileControls() {
+    const ctrl = qs('#mobile-controls');
+    if (!ctrl) return;
+
+    // Show only on touch devices
+    if (!isTouchDevice()) {
+        ctrl.style.display = 'none';
+        return;
+    }
+
+    ctrl.style.display = 'flex';
+
+    const mi = window._mobileInput;
+
+    /**
+     * Bind touchstart / touchend / touchcancel to a button.
+     * onDown  – called when finger touches the button
+     * onUp    – called when finger lifts (or touch cancelled)
+     */
+    function bindBtn(id, onDown, onUp) {
+        const btn = qs('#' + id);
+        if (!btn) return;
+
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btn.classList.add('active');
+            onDown();
+        }, { passive: false });
+
+        const release = (e) => {
+            e.preventDefault();
+            btn.classList.remove('active');
+            if (onUp) onUp();
+        };
+        btn.addEventListener('touchend',    release, { passive: false });
+        btn.addEventListener('touchcancel', release, { passive: false });
+    }
+
+    // Movement
+    bindBtn('mb-left',  () => { mi.left  = true;  }, () => { mi.left  = false; });
+    bindBtn('mb-right', () => { mi.right = true;  }, () => { mi.right = false; });
+    bindBtn('mb-up',    () => { mi.jumpJustDown  = true; }, null);
+
+    // Actions
+    bindBtn('mb-punch',   () => { mi.punchJustDown = true; }, null);
+    bindBtn('mb-kick',    () => { mi.kickJustDown  = true; }, null);
+    bindBtn('mb-block',   () => { mi.block = true;  }, () => { mi.block = false; });
+    bindBtn('mb-special', () => { mi.specialDown  = true;  },
+                          () => { mi.specialDown  = false; mi.specialJustUp = true; });
 }
 
 // ── Face upload handlers ──────────────────────────────────────
@@ -133,6 +211,9 @@ function startFight() {
     qs('#setup-screen').style.display = 'none';
     qs('#game-screen').style.display  = 'block';
 
+    // Show/wire mobile controls (no-op on desktop)
+    setupMobileControls();
+
     if (!game) {
         // Store config globally so FightScene.init() can always find it
         window._pendingFightConfig = { playerConfig, enemyConfig, arenaIndex, difficulty };
@@ -152,12 +233,26 @@ window.addEventListener('DOMContentLoaded', () => {
     // Restore values from URL params (shared link)
     applyUrlParams(readUrlParams());
 
-    // Upload buttons
-    qs('#load-player-btn').addEventListener('click', () =>
-        handleFaceUpload('player-sprite', 'player-face-preview', 'player'));
+    // Make drop zones tap-to-upload on mobile (touch devices have no drag-and-drop)
+    ['player-drop-zone', 'enemy-drop-zone'].forEach((zoneId, i) => {
+        const zone = qs('#' + zoneId);
+        if (!zone) return;
+        const inputId = (i === 0 ? 'player' : 'enemy') + '-sprite';
+        if (isTouchDevice()) {
+            zone.addEventListener('click', () => qs('#' + inputId).click());
+        }
+    });
 
-    qs('#load-enemy-btn').addEventListener('click', () =>
-        handleFaceUpload('enemy-sprite', 'enemy-face-preview', 'enemy'));
+    // Upload buttons
+    qs('#load-player-btn').addEventListener('click', (e) => {
+        e.stopPropagation(); // don't bubble to drop zone click handler
+        handleFaceUpload('player-sprite', 'player-face-preview', 'player');
+    });
+
+    qs('#load-enemy-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleFaceUpload('enemy-sprite', 'enemy-face-preview', 'enemy');
+    });
 
     qs('#random-enemy-btn').addEventListener('click', () => {
         const dataUrl = faceUploadManager.generateRandomFace();
@@ -168,13 +263,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     qs('#start-fight-btn').addEventListener('click', startFight);
 
-    // Drag-and-drop faces
+    // Drag-and-drop faces (desktop)
     ['player-drop-zone', 'enemy-drop-zone'].forEach((zoneId, i) => {
         const zone = qs('#' + zoneId);
         if (!zone) return;
         const key = i === 0 ? 'player' : 'enemy';
         const previewId = key + '-face-preview';
-        const inputId   = key + '-sprite';
 
         zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
         zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));

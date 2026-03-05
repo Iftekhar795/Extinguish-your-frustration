@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Prevent pinch-zoom and double-tap-zoom on mobile; cover notch area -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Face Fighter 🥊</title>
     <!-- Phaser 3 (local bundle; CDN fallback) -->
     <script src="phaser.min.js"></script>
@@ -33,16 +36,17 @@
         <div class="fighter-card player-card">
             <h2>🎮 Your Fighter</h2>
 
-            <!-- Face drop zone -->
+            <!-- Face drop zone (tap on mobile, drop on desktop) -->
             <div id="player-drop-zone" class="drop-zone">
                 <img id="player-face-preview" class="face-preview" alt="Player face preview">
-                <div>📷 Drop your selfie here or click to browse</div>
+                <div class="drop-label drop-desktop">📷 Drop your selfie here or click to browse</div>
+                <div class="drop-label drop-mobile">📷 Tap to take a photo or choose from gallery</div>
                 <div class="hint">JPG / PNG / GIF · Any size</div>
             </div>
 
             <div class="form-row">
                 <label for="player-sprite">Select file</label>
-                <input type="file" id="player-sprite" accept="image/*">
+                <input type="file" id="player-sprite" accept="image/*" capture="user">
                 <button class="btn btn-primary" id="load-player-btn">Upload</button>
             </div>
 
@@ -68,7 +72,8 @@
 
             <div id="enemy-drop-zone" class="drop-zone">
                 <img id="enemy-face-preview" class="face-preview" alt="Enemy face preview">
-                <div>📷 Drop an enemy face here or click to browse</div>
+                <div class="drop-label drop-desktop">📷 Drop an enemy face here or click to browse</div>
+                <div class="drop-label drop-mobile">📷 Tap to choose an enemy photo</div>
                 <div class="hint">Or use the random generator below</div>
             </div>
 
@@ -127,12 +132,18 @@
     <div class="how-to-play">
         <h3>🕹️ Controls</h3>
         <div class="controls-grid">
-            <div class="ctrl"><kbd>← →</kbd> Move</div>
-            <div class="ctrl"><kbd>↑</kbd> Jump</div>
-            <div class="ctrl"><kbd>Z</kbd> Punch</div>
-            <div class="ctrl"><kbd>X</kbd> Kick</div>
-            <div class="ctrl"><kbd>C</kbd> Block</div>
-            <div class="ctrl"><kbd>V</kbd> (hold) Charge Special · (release) Fire!</div>
+            <!-- Keyboard controls (hidden on touch devices) -->
+            <div class="ctrl desktop-only"><kbd>← →</kbd> Move</div>
+            <div class="ctrl desktop-only"><kbd>↑</kbd> Jump</div>
+            <div class="ctrl desktop-only"><kbd>Z</kbd> Punch</div>
+            <div class="ctrl desktop-only"><kbd>X</kbd> Kick</div>
+            <div class="ctrl desktop-only"><kbd>C</kbd> Block</div>
+            <div class="ctrl desktop-only"><kbd>V</kbd> (hold) Charge Special · (release) Fire!</div>
+            <!-- Touch controls (shown on touch devices) -->
+            <div class="ctrl mobile-only">🕹️ Left / Right pads move</div>
+            <div class="ctrl mobile-only">↑ button to jump</div>
+            <div class="ctrl mobile-only">👊 Punch · 🦵 Kick</div>
+            <div class="ctrl mobile-only">🛡 Block (hold) · ⚡ Special (hold &amp; release)</div>
             <div class="ctrl" style="grid-column:span 2">
                 💥 <strong>Combos:</strong>
                 Punch+Punch+Kick = <em>Fury Combo</em> &nbsp;|&nbsp;
@@ -150,6 +161,28 @@
 ═══════════════════════════════════════════════════════════ -->
 <div id="game-screen">
     <div id="game-container"></div>
+
+    <!-- ── Mobile virtual controls ──────────────────────────
+         Shown only on touch devices (JS sets display:flex).
+         Layout:  [← ↑ →]   ............   [👊 🦵]
+                                            [🛡  ⚡]
+    ──────────────────────────────────────────────────────── -->
+    <div id="mobile-controls">
+        <!-- D-pad (movement) -->
+        <div id="mb-move-zone">
+            <button class="mb-btn" id="mb-left"  aria-label="Move left">◀</button>
+            <button class="mb-btn mb-jump" id="mb-up" aria-label="Jump">↑</button>
+            <button class="mb-btn" id="mb-right" aria-label="Move right">▶</button>
+        </div>
+
+        <!-- Action buttons -->
+        <div id="mb-action-zone">
+            <button class="mb-btn mb-punch"   id="mb-punch"   aria-label="Punch">👊</button>
+            <button class="mb-btn mb-kick"    id="mb-kick"    aria-label="Kick">🦵</button>
+            <button class="mb-btn mb-block"   id="mb-block"   aria-label="Block">🛡</button>
+            <button class="mb-btn mb-special" id="mb-special" aria-label="Special">⚡</button>
+        </div>
+    </div>
 </div>
 
 

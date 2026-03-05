@@ -336,7 +336,8 @@ class Fighter {
 
     // ── drawing ───────────────────────────────────────────────
     _draw() {
-        const g = this.graphics;
+        const g   = this.graphics;
+        const now = Date.now(); // cache once per draw call
         g.clear();
 
         const flashing = this._flashTimer > 0 && Math.floor(this._flashTimer / 50) % 2 === 0;
@@ -349,7 +350,6 @@ class Fighter {
 
         // ── legs ────────────────────────────────────────────
         const legColor = flashing ? 0xff4444 : this.pantsColor;
-        g.fillStyle(legColor, 1);
 
         const legW  = 14;
         const legH  = 34;
@@ -359,7 +359,7 @@ class Fighter {
         let leftLegAngle  = 0;
         let rightLegAngle = 0;
         if (this.state === 'walking') {
-            const t = Date.now() / 200;
+            const t = now / 200;
             leftLegAngle  =  Math.sin(t) * 0.35;
             rightLegAngle = -Math.sin(t) * 0.35;
         } else if (this.state === 'kick') {
@@ -395,8 +395,7 @@ class Fighter {
             leftArmAngle  =  0.8;
             rightArmAngle = -0.8;
         } else if (this.state === 'special') {
-            const t = Date.now() / 100;
-            rightArmAngle = dir * (0.6 + Math.sin(t) * 0.4);
+            rightArmAngle = dir * (0.6 + Math.sin(now / 100) * 0.4);
         }
 
         this._drawArm(g, x - 18, shoulderY, armW, armH, leftArmAngle, armColor);

@@ -25,6 +25,11 @@ html, body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background: var(--bg-dark);
     color: var(--text);
+    /* Prevent rubber-band scroll on iOS */
+    overscroll-behavior: none;
+    /* Prevent pull-to-refresh (Chrome Android) */
+    overscroll-behavior-y: contain;
+    touch-action: manipulation;
 }
 
 /* ── Setup Screen ──────────────────────────────────────── */
@@ -33,7 +38,8 @@ html, body {
     flex-direction: column;
     align-items: center;
     min-height: 100vh;
-    padding: 20px;
+    min-height: -webkit-fill-available;
+    padding: 20px 20px env(safe-area-inset-bottom, 20px);
     background: linear-gradient(135deg, #0a0a1a 0%, #16163a 50%, #0a0a1a 100%);
 }
 
@@ -105,6 +111,13 @@ html, body {
     background: var(--bg-panel);
     margin-bottom: 12px;
     position: relative;
+    /* Ensure min touch target height */
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
 }
 
 .drop-zone:hover,
@@ -118,6 +131,10 @@ html, body {
     color: var(--text-muted);
     margin-top: 6px;
 }
+
+/* Desktop/mobile context labels inside drop zone */
+.drop-label { font-size: 13px; }
+.drop-mobile { display: none; }
 
 /* Face preview */
 .face-preview {
@@ -183,6 +200,11 @@ html, body {
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
     white-space: nowrap;
+    /* Remove mobile tap highlight */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    /* Comfortable touch target */
+    min-height: 44px;
 }
 
 .btn:active { transform: scale(0.97); }
@@ -256,6 +278,8 @@ html, body {
     font-size: 14px;
     outline: none;
     cursor: pointer;
+    /* Comfortable touch target */
+    min-height: 44px;
 }
 .control-group select:focus { border-color: var(--accent); }
 
@@ -281,6 +305,8 @@ html, body {
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
     box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 #start-fight-btn:hover {
     transform: translateY(-2px);
@@ -345,22 +371,106 @@ html, body {
 /* ── Game Screen ──────────────────────────────────────────── */
 #game-screen {
     display: none;
-    flex-direction: column;
-    align-items: center;
-    min-height: 100vh;
+    /* Fill the entire viewport so black background covers any gap */
+    position: fixed;
+    inset: 0;
     background: #000;
+    /* Prevent any touch scroll inside the game */
+    touch-action: none;
+    overflow: hidden;
 }
 
 #game-container {
     width: 100%;
-    max-width: 900px;
+    line-height: 0; /* remove inline-block gap under canvas */
 }
 
 #game-container canvas {
     display: block;
+    /* CSS-level scaling: fill container width, preserve aspect ratio */
     width: 100% !important;
     height: auto !important;
+    touch-action: none;
 }
+
+/* ── Mobile virtual controls ─────────────────────────────── */
+#mobile-controls {
+    /* Hidden by default; JS shows on touch devices */
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* Sit just above the home indicator on notched phones */
+    bottom: env(safe-area-inset-bottom, 0px);
+    height: 136px;
+    padding: 8px 16px 12px;
+    /* Subtle dark gradient so buttons are readable over any arena */
+    background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%);
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;   /* let click events pass through the backdrop */
+    z-index: 500;
+}
+
+/* D-pad zone (left) and action zone (right) */
+#mb-move-zone,
+#mb-action-zone {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    pointer-events: all;
+}
+
+/* Action buttons: 2×2 grid */
+#mb-action-zone {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* Individual mobile button */
+.mb-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.30);
+    background: rgba(255, 255, 255, 0.10);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.08s, border-color 0.08s, transform 0.08s;
+    /* Hardware-accelerate the button */
+    will-change: transform;
+}
+
+.mb-btn:active,
+.mb-btn.active {
+    background: rgba(255, 107, 53, 0.45);
+    border-color: var(--accent);
+    transform: scale(0.93);
+}
+
+/* Colour-coded action buttons */
+.mb-punch   { background: rgba(79, 195, 247, 0.18); border-color: rgba(79, 195, 247, 0.50); }
+.mb-kick    { background: rgba(255, 107,  53, 0.18); border-color: rgba(255, 107, 53, 0.50); }
+.mb-block   { background: rgba(150, 150, 150, 0.18); border-color: rgba(200, 200, 200, 0.40); }
+.mb-special { background: rgba(255, 215,   0, 0.18); border-color: rgba(255, 215,  0, 0.55); }
+
+.mb-punch.active, .mb-punch:active     { background: rgba(79, 195, 247, 0.55); }
+.mb-kick.active,  .mb-kick:active      { background: rgba(255, 107,  53, 0.55); }
+.mb-block.active, .mb-block:active     { background: rgba(150, 150, 150, 0.55); }
+.mb-special.active, .mb-special:active { background: rgba(255, 215,   0, 0.55); }
+
+/* Jump button slightly larger */
+.mb-jump { width: 54px; height: 54px; font-size: 20px; }
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 620px) {
@@ -368,4 +478,17 @@ html, body {
     .fighter-card { padding: 14px; min-width: 260px; }
     #start-fight-btn { padding: 14px 36px; font-size: 18px; }
     .vs-divider { font-size: 22px; }
+}
+
+/* Touch device – swap hint text in drop zones */
+@media (hover: none) and (pointer: coarse) {
+    .drop-desktop { display: none; }
+    .drop-mobile  { display: block; }
+    .desktop-only { display: none !important; }
+    .mobile-only  { display: block !important; }
+}
+
+/* Desktop – hide mobile-only controls hint */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-only { display: none !important; }
 }
