@@ -84,8 +84,11 @@ class FightScene extends Phaser.Scene {
         const W = this.scale.width;
         const H = this.scale.height;
 
-        this._rightBound = W - 60;
-        const groundY    = H - 80;
+        this._rightBound = W - 55;
+
+        // Space reserved at the bottom for mobile controls overlay
+        const MOBILE_CONTROL_CLEARANCE = 190;
+        const groundY = H - MOBILE_CONTROL_CLEARANCE;
 
         this._arena = ARENAS[this._arenaIdx % ARENAS.length];
 
@@ -95,14 +98,14 @@ class FightScene extends Phaser.Scene {
         // ── fighters ─────────────────────────────────────────
         const playerCfg = {
             ...this._playerConfig,
-            x: 160,
+            x: 115,
             y: groundY,
             facingRight: true,
         };
 
         const enemyCfg = {
             ...this._enemyConfig,
-            x: W - 160,
+            x: W - 115,
             y: groundY,
             facingRight: false,
             difficulty: this._difficulty,
@@ -158,15 +161,15 @@ class FightScene extends Phaser.Scene {
     _drawArena(W, H, groundY) {
         const a = this._arena;
 
-        // Sky
+        // Sky fill
         const sky = this.add.graphics();
         sky.fillStyle(a.bgColor, 1);
         sky.fillRect(0, 0, W, H);
 
-        // Gradient overlay
+        // Atmospheric gradient (darker toward floor)
         const grad = this.add.graphics();
-        grad.fillGradientStyle(a.bgColor, a.bgColor, 0x000000, 0x000000, 0.0, 0.0, 0.5, 0.5);
-        grad.fillRect(0, H * 0.5, W, H * 0.5);
+        grad.fillGradientStyle(a.bgColor, a.bgColor, 0x000000, 0x000000, 0, 0, 0.55, 0.55);
+        grad.fillRect(0, H * 0.4, W, H * 0.6);
 
         // Clouds / stars
         if (a.clouds) {
@@ -175,79 +178,122 @@ class FightScene extends Phaser.Scene {
             this._drawStars(W, H);
         }
 
-        // Floor
+        // Distant architecture / silhouette lines
+        this._drawArenaDetails(W, groundY, a);
+
+        // Floor surface with perspective stripes
         const floor = this.add.graphics();
         floor.fillStyle(a.floorColor, 1);
         floor.fillRect(0, groundY, W, H - groundY);
 
-        // Floor line
-        floor.lineStyle(3, a.accentColor, 0.8);
-        floor.beginPath();
-        floor.moveTo(0, groundY);
-        floor.lineTo(W, groundY);
-        floor.strokePath();
+        // Perspective grid lines on floor
+        floor.lineStyle(1, a.accentColor, 0.12);
+        for (let i = 1; i <= 5; i++) {
+            const fy = groundY + (H - groundY) * (i / 6);
+            floor.beginPath(); floor.moveTo(0, fy); floor.lineTo(W, fy); floor.strokePath();
+        }
+        // Vertical convergence lines
+        floor.lineStyle(1, a.accentColor, 0.09);
+        for (let i = 0; i <= 8; i++) {
+            const fx = W * (i / 8);
+            floor.beginPath();
+            floor.moveTo(W / 2, groundY);
+            floor.lineTo(fx, H);
+            floor.strokePath();
+        }
 
-        // Arena name
-        this.add.text(W / 2, 20, a.name, {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            color: '#' + a.accentColor.toString(16).padStart(6, '0'),
-            alpha: 0.7,
-        }).setOrigin(0.5, 0);
+        // Floor edge glow line
+        const glow = this.add.graphics();
+        glow.lineStyle(4, a.accentColor, 0.55);
+        glow.beginPath(); glow.moveTo(0, groundY); glow.lineTo(W, groundY); glow.strokePath();
+        glow.lineStyle(1, 0xffffff, 0.20);
+        glow.beginPath(); glow.moveTo(0, groundY - 1); glow.lineTo(W, groundY - 1); glow.strokePath();
+    }
+
+    _drawArenaDetails(W, groundY, a) {
+        const g = this.add.graphics();
+        // Simple silhouette buildings / pillars giving depth
+        g.fillStyle(0x000000, 0.22);
+        const bh = groundY * 0.4;
+        // Left building
+        g.fillRect(0, groundY - bh, W * 0.18, bh);
+        // Right building
+        g.fillRect(W - W * 0.15, groundY - bh * 0.75, W * 0.15, bh * 0.75);
+        // Centre arch hint
+        g.fillStyle(a.accentColor, 0.06);
+        g.fillCircle(W / 2, groundY, W * 0.42);
     }
 
     _drawClouds(W, H, color) {
         const g = this.add.graphics();
-        g.fillStyle(color, 0.08);
-        [[W * 0.15, H * 0.2, 80], [W * 0.55, H * 0.15, 60], [W * 0.8, H * 0.3, 70]].forEach(([x, y, r]) => {
-            g.fillCircle(x, y, r);
-            g.fillCircle(x + r * 0.7, y + r * 0.2, r * 0.7);
-            g.fillCircle(x - r * 0.5, y + r * 0.1, r * 0.6);
+        g.fillStyle(color, 0.07);
+        [[W * 0.15, H * 0.18, 60], [W * 0.55, H * 0.12, 50], [W * 0.82, H * 0.24, 55]].forEach(([cx, cy, r]) => {
+            g.fillCircle(cx,       cy,       r);
+            g.fillCircle(cx + r * 0.65, cy + r * 0.20, r * 0.65);
+            g.fillCircle(cx - r * 0.45, cy + r * 0.15, r * 0.55);
         });
     }
 
     _drawStars(W, H) {
         const g = this.add.graphics();
-        g.fillStyle(0xffffff, 1);
-        for (let i = 0; i < 60; i++) {
-            const x = Math.random() * W;
-            const y = Math.random() * H * 0.7;
-            g.fillCircle(x, y, Math.random() * 1.5 + 0.5);
+        for (let i = 0; i < 80; i++) {
+            const bri = Math.random();
+            g.fillStyle(0xffffff, bri * 0.7 + 0.1);
+            g.fillCircle(
+                Math.random() * W,
+                Math.random() * H * 0.72,
+                Math.random() * 1.6 + 0.3,
+            );
         }
     }
 
-    // ── HUD ────────────────────────────────────────────────────
 
     _createHUD(W) {
-        const barW = W * 0.36;
-        const barH = 22;
-        const barY = 14;
+        const barH   = 22;
+        const barY   = 36;       // top of HP bars
+        const nameY  = 8;        // top of name text row
+        const barW   = W * 0.41; // ~197 px at W=480 — leaves ~86 px for center timer
+        const eBarX  = W - 8 - barW;
+        const cx     = W / 2;
 
-        // Player HP bar (left)
-        this._playerHpBg = this.add.graphics();
-        this._playerHpBg.fillStyle(0x222222, 0.9);
-        this._playerHpBg.fillRoundedRect(10, barY, barW, barH, 4);
+        // ── Translucent HUD backing strip ─────────────────────
+        const hudBg = this.add.graphics();
+        hudBg.fillStyle(0x000000, 0.52);
+        hudBg.fillRect(0, 0, W, barY + barH + 22);
+        hudBg.lineStyle(1, 0x223355, 0.7);
+        hudBg.strokeRect(0, barY + barH + 22, W, 0);
 
-        this._playerHpFill = this.add.graphics();
-
-        this.add.text(14, barY + barH + 2, this._playerConfig.name || 'PLAYER 1', {
-            fontSize: '11px', fontFamily: 'Arial', color: '#aaaaaa',
+        // ── Player name (left) ────────────────────────────────
+        this.add.text(10, nameY, (this._playerConfig.name || 'PLAYER').toUpperCase(), {
+            fontSize: '13px', fontFamily: 'Arial Black, Arial',
+            color: '#5DD8FF',
         });
 
-        // Enemy HP bar (right)
-        this._enemyHpBg = this.add.graphics();
-        this._enemyHpBg.fillStyle(0x222222, 0.9);
-        this._enemyHpBg.fillRoundedRect(W - 10 - barW, barY, barW, barH, 4);
-
-        this._enemyHpFill = this.add.graphics();
-
-        this.add.text(W - 14, barY + barH + 2, this._enemyConfig.name || 'ENEMY', {
-            fontSize: '11px', fontFamily: 'Arial', color: '#aaaaaa',
+        // ── Enemy name (right) ────────────────────────────────
+        this.add.text(W - 10, nameY, (this._enemyConfig.name || 'ENEMY').toUpperCase(), {
+            fontSize: '13px', fontFamily: 'Arial Black, Arial',
+            color: '#FF7070',
         }).setOrigin(1, 0);
 
-        // Timer
-        this._timerText = this.add.text(W / 2, barY, '99', {
-            fontSize: '28px',
+        // ── Player HP bar ─────────────────────────────────────
+        this._playerHpBg = this.add.graphics();
+        this._playerHpBg.fillStyle(0x111111, 0.95);
+        this._playerHpBg.fillRoundedRect(8, barY, barW, barH, 4);
+        this._playerHpBg.lineStyle(1.5, 0x3399BB, 0.6);
+        this._playerHpBg.strokeRoundedRect(8, barY, barW, barH, 4);
+        this._playerHpFill = this.add.graphics();
+
+        // ── Enemy HP bar ──────────────────────────────────────
+        this._enemyHpBg = this.add.graphics();
+        this._enemyHpBg.fillStyle(0x111111, 0.95);
+        this._enemyHpBg.fillRoundedRect(eBarX, barY, barW, barH, 4);
+        this._enemyHpBg.lineStyle(1.5, 0xBB3333, 0.6);
+        this._enemyHpBg.strokeRoundedRect(eBarX, barY, barW, barH, 4);
+        this._enemyHpFill = this.add.graphics();
+
+        // ── Timer ─────────────────────────────────────────────
+        this._timerText = this.add.text(cx, barY - 1, '99', {
+            fontSize: '30px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: '#ffffff',
@@ -255,24 +301,34 @@ class FightScene extends Phaser.Scene {
             strokeThickness: 4,
         }).setOrigin(0.5, 0);
 
-        // Round wins (pip indicators)
+        // ── Round label ───────────────────────────────────────
+        this._roundLabel = this.add.text(cx, barY + barH + 4, `ROUND ${this._round}`, {
+            fontSize: '10px', fontFamily: 'Arial', color: '#889999',
+        }).setOrigin(0.5, 0);
+
+        // ── Win pips ──────────────────────────────────────────
+        const pipY = barY + barH + 9;
         this._playerWinPips = [];
         this._enemyWinPips  = [];
         for (let i = 0; i < this._maxRounds; i++) {
-            const pip = this.add.graphics();
-            pip.fillStyle(0x444444, 1);
-            pip.fillCircle(20 + i * 14, barY + barH + 16, 5);
-            this._playerWinPips.push(pip);
+            const pp = this.add.graphics();
+            pp.fillStyle(0x2a2a3a, 1);
+            pp.fillCircle(13 + i * 15, pipY, 5);
+            pp.lineStyle(1.2, 0x445566, 1);
+            pp.strokeCircle(13 + i * 15, pipY, 5);
+            this._playerWinPips.push(pp);
 
             const ep = this.add.graphics();
-            ep.fillStyle(0x444444, 1);
-            ep.fillCircle(W - 20 - i * 14, barY + barH + 16, 5);
+            ep.fillStyle(0x2a2a3a, 1);
+            ep.fillCircle(W - 13 - i * 15, pipY, 5);
+            ep.lineStyle(1.2, 0x664444, 1);
+            ep.strokeCircle(W - 13 - i * 15, pipY, 5);
             this._enemyWinPips.push(ep);
         }
 
-        // Combo text
-        this._comboText = this.add.text(W / 2, 70, '', {
-            fontSize: '22px',
+        // ── Combo text ────────────────────────────────────────
+        this._comboText = this.add.text(cx, barY + barH + 26, '', {
+            fontSize: '21px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: '#FFD700',
@@ -280,18 +336,18 @@ class FightScene extends Phaser.Scene {
             strokeThickness: 3,
         }).setOrigin(0.5, 0).setAlpha(0);
 
-        // Controls hint – keyboard shortcuts, hidden on touch devices
+        // ── Keyboard hint (desktop) ───────────────────────────
         const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-        this._controlsHint = this.add.text(W / 2, this.scale.height - 18,
+        this._controlsHint = this.add.text(cx, this.scale.height - 14,
             '← → Move  ↑ Jump  Z Punch  X Kick  C Block  V Special', {
-            fontSize: '11px', fontFamily: 'Arial', color: '#888888',
+            fontSize: '10px', fontFamily: 'Arial', color: '#666677',
         }).setOrigin(0.5, 1).setVisible(!isMobile);
 
-        this._barW = barW;
-        this._barH = barH;
-        this._barY = barY;
-
-        // Cache previous HP ratios to avoid unnecessary redraws
+        // Cache layout values
+        this._barW  = barW;
+        this._barH  = barH;
+        this._barY  = barY;
+        this._eBarX = eBarX;
         this._prevPlayerHpRatio = -1;
         this._prevEnemyHpRatio  = -1;
     }
@@ -299,60 +355,81 @@ class FightScene extends Phaser.Scene {
     _updateHUD(delta) {
         const W = this.scale.width;
 
-        // Player HP – only redraw when ratio changes
+        // Player HP (fills left → right)
         const pRatio = this.player.hp / this.player.maxHp;
         if (pRatio !== this._prevPlayerHpRatio) {
             this._playerHpFill.clear();
-            this._playerHpFill.fillStyle(this._hpColor(pRatio), 1);
-            this._playerHpFill.fillRoundedRect(10, this._barY, this._barW * pRatio, this._barH, 4);
+            if (pRatio > 0) {
+                const c = this._hpColor(pRatio);
+                this._playerHpFill.fillStyle(c, 1);
+                this._playerHpFill.fillRoundedRect(8, this._barY, this._barW * pRatio, this._barH, 4);
+                // Shine
+                this._playerHpFill.fillStyle(0xffffff, 0.13);
+                this._playerHpFill.fillRoundedRect(8, this._barY, this._barW * pRatio, this._barH * 0.45, 4);
+            }
             this._prevPlayerHpRatio = pRatio;
         }
 
-        // Enemy HP – only redraw when ratio changes
+        // Enemy HP (fills right → left, SF style)
         const eRatio = this.enemy.hp / this.enemy.maxHp;
         if (eRatio !== this._prevEnemyHpRatio) {
             this._enemyHpFill.clear();
-            this._enemyHpFill.fillStyle(this._hpColor(eRatio), 1);
-            const eBarX = W - 10 - this._barW;
-            const eBarW = this._barW * eRatio;
-            this._enemyHpFill.fillRoundedRect(eBarX + (this._barW - eBarW), this._barY, eBarW, this._barH, 4);
+            if (eRatio > 0) {
+                const c    = this._hpColor(eRatio);
+                const fillW = this._barW * eRatio;
+                const fillX = this._eBarX + (this._barW - fillW);
+                this._enemyHpFill.fillStyle(c, 1);
+                this._enemyHpFill.fillRoundedRect(fillX, this._barY, fillW, this._barH, 4);
+                this._enemyHpFill.fillStyle(0xffffff, 0.13);
+                this._enemyHpFill.fillRoundedRect(fillX, this._barY, fillW, this._barH * 0.45, 4);
+            }
             this._prevEnemyHpRatio = eRatio;
         }
 
-        // Timer
+        // Timer countdown
         this._timerAccum += delta;
         if (this._timerAccum >= 1000) {
             this._timerAccum -= 1000;
             this._roundTimer = Math.max(0, this._roundTimer - 1);
             this._timerText.setText(String(this._roundTimer).padStart(2, '0'));
-            if (this._roundTimer <= 10) {
-                this._timerText.setColor('#FF6B35');
-            }
+            if (this._roundTimer <= 10) this._timerText.setColor('#FF6B35');
         }
 
         // Combo text fade
         if (this._comboText.alpha > 0) {
-            this._comboText.setAlpha(this._comboText.alpha - delta / 1500);
+            this._comboText.setAlpha(this._comboText.alpha - delta / 1400);
         }
     }
 
     _hpColor(ratio) {
-        if (ratio > 0.5) return 0x2ECC71;
-        if (ratio > 0.25) return 0xF39C12;
-        return 0xE74C3C;
+        if (ratio > 0.50) return 0x22DD66;
+        if (ratio > 0.25) return 0xEEAA11;
+        return 0xEE3322;
     }
 
     _updateWinPips() {
-        const fill = 0xFFD700;
-        for (let i = 0; i < this._playerWins; i++) {
-            this._playerWinPips[i].clear();
-            this._playerWinPips[i].fillStyle(fill, 1);
-            this._playerWinPips[i].fillCircle(20 + i * 14, this._barY + this._barH + 16, 5);
-        }
-        for (let i = 0; i < this._enemyWins; i++) {
-            this._enemyWinPips[i].clear();
-            this._enemyWinPips[i].fillStyle(fill, 1);
-            this._enemyWinPips[i].fillCircle(this.scale.width - 20 - i * 14, this._barY + this._barH + 16, 5);
+        const W   = this.scale.width;
+        const pipY = this._barY + this._barH + 9;
+        for (let i = 0; i < this._maxRounds; i++) {
+            const pp = this._playerWinPips[i];
+            pp.clear();
+            if (i < this._playerWins) {
+                pp.fillStyle(0xFFD700, 1); pp.fillCircle(13 + i * 15, pipY, 5);
+                pp.lineStyle(1.2, 0xFFA500, 1); pp.strokeCircle(13 + i * 15, pipY, 5);
+            } else {
+                pp.fillStyle(0x2a2a3a, 1); pp.fillCircle(13 + i * 15, pipY, 5);
+                pp.lineStyle(1.2, 0x445566, 1); pp.strokeCircle(13 + i * 15, pipY, 5);
+            }
+
+            const ep = this._enemyWinPips[i];
+            ep.clear();
+            if (i < this._enemyWins) {
+                ep.fillStyle(0xFFD700, 1); ep.fillCircle(W - 13 - i * 15, pipY, 5);
+                ep.lineStyle(1.2, 0xFFA500, 1); ep.strokeCircle(W - 13 - i * 15, pipY, 5);
+            } else {
+                ep.fillStyle(0x2a2a3a, 1); ep.fillCircle(W - 13 - i * 15, pipY, 5);
+                ep.lineStyle(1.2, 0x664444, 1); ep.strokeCircle(W - 13 - i * 15, pipY, 5);
+            }
         }
     }
 
@@ -385,7 +462,9 @@ class FightScene extends Phaser.Scene {
 
         // Jump
         if (Phaser.Input.Keyboard.JustDown(k.up) || mi.jumpJustDown) {
+            const wasGrounded = p.isGrounded;
             p.jump();
+            if (wasGrounded && !p.isGrounded) soundManager.playJump();
             mi.jumpJustDown = false;
         }
 
@@ -395,6 +474,7 @@ class FightScene extends Phaser.Scene {
         // Punch (just pressed)
         if (Phaser.Input.Keyboard.JustDown(k.punch) || mi.punchJustDown) {
             if (p.punch()) {
+                soundManager.playPunch();
                 this.enemy.recordPlayerAttack('punch');
                 this._checkPlayerCombo();
             }
@@ -404,6 +484,7 @@ class FightScene extends Phaser.Scene {
         // Kick (just pressed)
         if (Phaser.Input.Keyboard.JustDown(k.kick) || mi.kickJustDown) {
             if (p.kick()) {
+                soundManager.playKick();
                 this.enemy.recordPlayerAttack('kick');
                 this._checkPlayerCombo();
             }
@@ -417,6 +498,7 @@ class FightScene extends Phaser.Scene {
         if (Phaser.Input.Keyboard.JustUp(k.special) || mi.specialJustUp) {
             if (p.getSpecialCharge() >= 50) {
                 p.special();
+                soundManager.playSpecialRelease();
                 this.enemy.recordPlayerAttack('special');
             }
             mi.specialJustUp = false;
@@ -426,6 +508,7 @@ class FightScene extends Phaser.Scene {
     _checkPlayerCombo() {
         const combo = this.player.checkCombo();
         if (combo) {
+            soundManager.playCombo();
             this._showComboText(combo.name + '! +' + combo.damage);
             // Apply bonus damage to enemy
             this.enemy.receiveHit(combo.damage);
@@ -448,9 +531,17 @@ class FightScene extends Phaser.Scene {
                 const attack = this.player._attacks[state];
                 if (attack) {
                     const dmg = attack.damage;
+                    if (this.enemy.isBlocking) {
+                        soundManager.playBlock();
+                    } else {
+                        soundManager.playEnemyHitVoice();
+                    }
                     this.enemy.receiveHit(dmg);
                     this.player._attackHit = true;
                     this._spawnHitEffect(this.enemy.x, this.enemy.y - 60, false);
+                    if (this.enemy.isKO()) {
+                        this.time.delayedCall(120, () => soundManager.playKO());
+                    }
                 }
             }
         }
@@ -463,9 +554,17 @@ class FightScene extends Phaser.Scene {
                 const attack = this.enemy._attacks[state];
                 if (attack) {
                     const dmg = attack.damage;
+                    if (this.player.isBlocking) {
+                        soundManager.playBlock();
+                    } else {
+                        soundManager.playHitReceived();
+                    }
                     this.player.receiveHit(dmg);
                     this.enemy._attackHit = true;
                     this._spawnHitEffect(this.player.x, this.player.y - 60, true);
+                    if (this.player.isKO()) {
+                        this.time.delayedCall(120, () => soundManager.playKO());
+                    }
                 }
             }
         }
@@ -479,18 +578,43 @@ class FightScene extends Phaser.Scene {
     }
 
     _spawnHitEffect(x, y, redTeam) {
-        const color = redTeam ? '#ff4444' : '#ffaa00';
-        const t = this.add.text(x, y, '★', {
-            fontSize: '28px', color, stroke: '#000', strokeThickness: 2,
-        }).setOrigin(0.5);
+        const symbols = ['★', '💥', '✸', '⚡', '✦'];
+        const color   = redTeam ? '#FF4455' : '#FFCC00';
+
+        // Central burst flash
+        const flash = this.add.graphics();
+        flash.fillStyle(redTeam ? 0xFF2244 : 0xFFBB00, 0.55);
+        flash.fillCircle(x, y, 26);
         this.tweens.add({
-            targets: t,
-            y: y - 40,
-            alpha: 0,
-            duration: 450,
-            ease: 'Power2',
-            onComplete: () => t.destroy(),
+            targets: flash, alpha: 0, scaleX: 2.2, scaleY: 2.2,
+            duration: 180, ease: 'Power2',
+            onComplete: () => flash.destroy(),
         });
+
+        // Scatter particles
+        for (let i = 0; i < 4; i++) {
+            const sym = i === 0 ? symbols[Math.floor(Math.random() * symbols.length)] : '·';
+            const ox  = (Math.random() - 0.5) * 36;
+            const oy  = (Math.random() - 0.5) * 24;
+            const t   = this.add.text(x + ox, y + oy, sym, {
+                fontSize: i === 0 ? '26px' : '16px',
+                color,
+                stroke: '#000000',
+                strokeThickness: 2,
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: t,
+                y:       y + oy - 55 - Math.random() * 22,
+                x:       x + ox + (Math.random() - 0.5) * 36,
+                alpha:   0,
+                scaleX:  i === 0 ? 1.6 : 1,
+                scaleY:  i === 0 ? 1.6 : 1,
+                duration: 380 + Math.random() * 120,
+                ease:    'Power2',
+                onComplete: () => t.destroy(),
+            });
+        }
     }
 
     // ── round / game logic ────────────────────────────────────
@@ -538,90 +662,113 @@ class FightScene extends Phaser.Scene {
     }
 
     _showRoundResult(big, small, onDone) {
+        soundManager.playRoundWin();
+
         const W = this.scale.width;
         const H = this.scale.height;
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x000000, 0.5);
-        overlay.fillRect(0, 0, W, H);
 
-        const bigTxt = this.add.text(W / 2, H / 2 - 20, big, {
+        const overlay = this.add.graphics();
+        overlay.fillStyle(0x000000, 0.62);
+        overlay.fillRect(0, 0, W, H);
+        overlay.setAlpha(0);
+        this.tweens.add({ targets: overlay, alpha: 1, duration: 220 });
+
+        const bigTxt = this.add.text(W / 2, H / 2 - 24, big, {
             fontSize: '64px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: '#FFD700',
             stroke: '#000000',
-            strokeThickness: 6,
-        }).setOrigin(0.5);
+            strokeThickness: 7,
+        }).setOrigin(0.5).setScale(2).setAlpha(0);
 
-        const smTxt = this.add.text(W / 2, H / 2 + 40, small, {
+        const smTxt = this.add.text(W / 2, H / 2 + 46, small, {
             fontSize: '24px',
-            fontFamily: 'Arial',
+            fontFamily: 'Arial Black, Arial',
             color: '#ffffff',
             stroke: '#000000',
             strokeThickness: 3,
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setAlpha(0);
 
-        this.time.delayedCall(2000, () => {
-            overlay.destroy();
-            bigTxt.destroy();
-            smTxt.destroy();
+        this.tweens.add({ targets: bigTxt, alpha: 1, scaleX: 1, scaleY: 1, duration: 280, ease: 'Back.Out' });
+        this.time.delayedCall(180, () => {
+            this.tweens.add({ targets: smTxt, alpha: 1, duration: 260 });
+        });
+
+        this.time.delayedCall(2200, () => {
+            overlay.destroy(); bigTxt.destroy(); smTxt.destroy();
             if (onDone) onDone();
         });
     }
 
     _showRoundSplash() {
-        const W = this.scale.width;
-        const H = this.scale.height;
+        soundManager.playRoundStart();
 
-        const roundTxt = this.add.text(W / 2, H / 2, `ROUND ${this._round}`, {
-            fontSize: '52px',
+        const W  = this.scale.width;
+        const H  = this.scale.height;
+        const cx = W / 2;
+        const cy = H / 2;
+
+        const overlay = this.add.graphics();
+        overlay.fillStyle(0x000000, 0.40);
+        overlay.fillRect(0, 0, W, H);
+        overlay.setAlpha(0);
+        this.tweens.add({ targets: overlay, alpha: 1, duration: 200 });
+
+        const roundTxt = this.add.text(cx, cy - 44, `ROUND  ${this._round}`, {
+            fontSize: '44px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: '#ffffff',
             stroke: '#000000',
             strokeThickness: 5,
-        }).setOrigin(0.5).setAlpha(0);
+        }).setOrigin(0.5).setScale(0).setAlpha(0);
 
-        const fightTxt = this.add.text(W / 2, H / 2 + 60, 'FIGHT!', {
-            fontSize: '64px',
+        const fightTxt = this.add.text(cx, cy + 28, 'FIGHT!', {
+            fontSize: '62px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: '#FF6B35',
             stroke: '#000000',
-            strokeThickness: 6,
-        }).setOrigin(0.5).setAlpha(0);
+            strokeThickness: 7,
+        }).setOrigin(0.5).setScale(0).setAlpha(0);
 
-        this.tweens.add({ targets: roundTxt, alpha: 1, duration: 300, ease: 'Power2' });
-        this.time.delayedCall(600, () => {
-            this.tweens.add({ targets: fightTxt, alpha: 1, duration: 200, ease: 'Power2' });
+        this.tweens.add({ targets: roundTxt, alpha: 1, scaleX: 1, scaleY: 1, duration: 320, ease: 'Back.Out' });
+
+        this.time.delayedCall(540, () => {
+            this.tweens.add({ targets: fightTxt, alpha: 1, scaleX: 1.08, scaleY: 1.08, duration: 200, ease: 'Back.Out' });
+            this.tweens.add({ targets: fightTxt, scaleX: 1, scaleY: 1, duration: 140, delay: 200 });
         });
-        this.time.delayedCall(1800, () => {
-            this.tweens.add({ targets: [roundTxt, fightTxt], alpha: 0, duration: 400, onComplete: () => {
-                roundTxt.destroy();
-                fightTxt.destroy();
-            }});
+
+        this.time.delayedCall(1700, () => {
+            this.tweens.add({
+                targets: [overlay, roundTxt, fightTxt], alpha: 0, duration: 320,
+                onComplete: () => { overlay.destroy(); roundTxt.destroy(); fightTxt.destroy(); },
+            });
         });
     }
 
     _nextRound() {
         // Reset fighters
         const W = this.scale.width;
-        this.player.x   = 160;
+        this.player.x   = 115;
         this.player.y   = this._groundY;
         this.player.hp  = this.player.maxHp;
         this.player._enterState('idle', 0);
-        this._prevPlayerHpRatio = -1; // force HP bar redraw
+        this._prevPlayerHpRatio = -1;
 
-        this.enemy.x    = W - 160;
+        this.enemy.x    = W - 115;
         this.enemy.y    = this._groundY;
         this.enemy.hp   = this.enemy.maxHp;
         this.enemy._enterState('idle', 0);
-        this._prevEnemyHpRatio = -1; // force HP bar redraw
+        this._prevEnemyHpRatio = -1;
 
         this._roundTimer = 99;
         this._timerText.setText('99').setColor('#ffffff');
         this._timerAccum = 0;
         this._roundOver  = false;
+
+        if (this._roundLabel) this._roundLabel.setText(`ROUND ${this._round}`);
 
         this._showRoundSplash();
     }
@@ -632,41 +779,44 @@ class FightScene extends Phaser.Scene {
         const H = this.scale.height;
 
         const overlay = this.add.graphics();
-        overlay.fillStyle(0x000000, 0.75);
+        overlay.fillStyle(0x000000, 0.78);
         overlay.fillRect(0, 0, W, H);
+        overlay.setAlpha(0);
+        this.tweens.add({ targets: overlay, alpha: 1, duration: 350 });
 
         const isPlayerWin = winner === 'player';
         const headline = isPlayerWin ? '🏆 VICTORY!' : '💀 DEFEATED!';
         const sub      = isPlayerWin
-            ? `You won ${this._playerWins} - ${this._enemyWins}`
-            : `Enemy won ${this._enemyWins} - ${this._playerWins}`;
+            ? `You won  ${this._playerWins} - ${this._enemyWins}`
+            : `Enemy won  ${this._enemyWins} - ${this._playerWins}`;
 
-        this.add.text(W / 2, H / 2 - 60, headline, {
-            fontSize: '56px',
+        const headTxt = this.add.text(W / 2, H / 2 - 70, headline, {
+            fontSize: '50px',
             fontFamily: 'Arial Black, Arial',
             fontStyle: 'bold',
             color: isPlayerWin ? '#FFD700' : '#FF4444',
             stroke: '#000000',
             strokeThickness: 6,
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScale(2).setAlpha(0);
 
-        this.add.text(W / 2, H / 2, sub, {
-            fontSize: '22px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-        }).setOrigin(0.5);
+        this.tweens.add({ targets: headTxt, alpha: 1, scaleX: 1, scaleY: 1, duration: 400, delay: 200, ease: 'Back.Out' });
 
-        // Share link button
+        this.add.text(W / 2, H / 2 - 12, sub, {
+            fontSize: '20px',
+            fontFamily: 'Arial Black, Arial',
+            color: '#dddddd',
+            stroke: '#000000',
+            strokeThickness: 2,
+        }).setOrigin(0.5).setAlpha(0.9);
+
+        // Share link
         const shareUrl = this._buildShareUrl();
-        const shareTxt = this.add.text(W / 2, H / 2 + 50,
+        const shareTxt = this.add.text(W / 2, H / 2 + 40,
             '🔗 Copy shareable link', {
-            fontSize: '16px',
-            fontFamily: 'Arial',
-            color: '#88DDFF',
-            backgroundColor: '#1a1a2e',
-            padding: { x: 14, y: 8 },
+            fontSize: '15px', fontFamily: 'Arial', color: '#88DDFF',
+            backgroundColor: '#0a1830',
+            padding: { x: 14, y: 9 },
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
         shareTxt.on('pointerover', () => shareTxt.setColor('#ffffff'));
         shareTxt.on('pointerout',  () => shareTxt.setColor('#88DDFF'));
         shareTxt.on('pointerdown', () => {
@@ -675,22 +825,21 @@ class FightScene extends Phaser.Scene {
             this.time.delayedCall(2000, () => shareTxt.setText('🔗 Copy shareable link'));
         });
 
-        // Rematch button
-        const rematch = this.add.text(W / 2, H / 2 + 100, '⚔️  Rematch', {
+        // Rematch
+        const rematch = this.add.text(W / 2, H / 2 + 94, '⚔️  REMATCH', {
             fontSize: '20px',
             fontFamily: 'Arial Black, Arial',
             color: '#FF6B35',
             backgroundColor: '#1a1a2e',
-            padding: { x: 20, y: 10 },
+            padding: { x: 22, y: 12 },
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
         rematch.on('pointerover', () => rematch.setColor('#FFD700'));
         rematch.on('pointerout',  () => rematch.setColor('#FF6B35'));
         rematch.on('pointerdown', () => {
-            this._gameOver = false;
-            this._round = 1;
-            this._playerWins = 0;
-            this._enemyWins  = 0;
+            this._gameOver    = false;
+            this._round       = 1;
+            this._playerWins  = 0;
+            this._enemyWins   = 0;
             this.scene.restart({
                 playerConfig: this._playerConfig,
                 enemyConfig:  this._enemyConfig,
@@ -699,13 +848,10 @@ class FightScene extends Phaser.Scene {
             });
         });
 
-        // Back to setup button
-        const backBtn = this.add.text(W / 2, H / 2 + 155, '← Back to Setup', {
-            fontSize: '16px',
-            fontFamily: 'Arial',
-            color: '#aaaaaa',
+        // Back to setup
+        const backBtn = this.add.text(W / 2, H / 2 + 150, '← Back to Setup', {
+            fontSize: '15px', fontFamily: 'Arial', color: '#888888',
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
         backBtn.on('pointerdown', () => {
             this.scene.stop();
             document.getElementById('setup-screen').style.display = 'flex';

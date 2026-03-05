@@ -337,132 +337,288 @@ class Fighter {
     // ── drawing ───────────────────────────────────────────────
     _draw() {
         const g   = this.graphics;
-        const now = Date.now(); // cache once per draw call
+        const now = Date.now();
         g.clear();
 
         const flashing = this._flashTimer > 0 && Math.floor(this._flashTimer / 50) % 2 === 0;
-        const alpha     = this.state === 'ko' ? 0.5 : 1;
+        const alpha    = this.state === 'ko' ? 0.48 : 1;
         g.setAlpha(alpha);
 
-        const dir   = this.facingRight ? 1 : -1;
-        const x     = this.x;
-        const y     = this.y; // feet
+        const dir = this.facingRight ? 1 : -1;
+        const x   = this.x;
+        const y   = this.y; // feet
 
-        // ── legs ────────────────────────────────────────────
-        const legColor = flashing ? 0xff4444 : this.pantsColor;
+        // ── Per-state animation parameters ───────────────────
+        // All offsets are in game units; angles in radians.
 
-        const legW  = 14;
-        const legH  = 34;
-        const hipY  = y - legH;
+        let bodyLeanX    = 0;   // torso/head horizontal offset
+        let crouchOffset = 0;   // feet-to-hip distance change (positive = squat)
+        let headOffX     = 0;   // extra head horizontal offset
+        let headOffY     = 0;   // extra head vertical offset
 
-        // Leg animation
         let leftLegAngle  = 0;
         let rightLegAngle = 0;
-        if (this.state === 'walking') {
-            const t = now / 200;
-            leftLegAngle  =  Math.sin(t) * 0.35;
-            rightLegAngle = -Math.sin(t) * 0.35;
-        } else if (this.state === 'kick') {
-            const progress = 1 - (this.stateTimer / this._attacks.kick.duration);
-            rightLegAngle  = dir * Math.sin(progress * Math.PI) * 0.9;
-        } else if (this.state === 'jumping') {
-            leftLegAngle  = -0.3;
-            rightLegAngle =  0.3;
-        }
-
-        this._drawLeg(g, x - 8, hipY, legW, legH, leftLegAngle, legColor);
-        this._drawLeg(g, x + 8, hipY, legW, legH, rightLegAngle, legColor);
-
-        // ── torso ────────────────────────────────────────────
-        const torsoColor = flashing ? 0xff4444 : this.bodyColor;
-        g.fillStyle(torsoColor, 1);
-        const torsoH = 44;
-        const torsoY = hipY - torsoH;
-        g.fillRoundedRect(x - 18, torsoY, 36, torsoH, 6);
-
-        // ── arms ─────────────────────────────────────────────
-        const armColor = flashing ? 0xff4444 : this.skinColor;
-        const armW = 12;
-        const armH = 30;
-        const shoulderY = torsoY + 4;
-
         let leftArmAngle  = 0;
         let rightArmAngle = 0;
-        if (this.state === 'punch') {
-            const progress = 1 - (this.stateTimer / this._attacks.punch.duration);
-            rightArmAngle  = dir * Math.sin(progress * Math.PI) * 1.2;
-        } else if (this.state === 'blocking') {
-            leftArmAngle  =  0.8;
-            rightArmAngle = -0.8;
-        } else if (this.state === 'special') {
-            rightArmAngle = dir * (0.6 + Math.sin(now / 100) * 0.4);
+
+        // Pre-compute progress values (0→1 over the state duration)
+        const punchProg   = this.state === 'punch'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.punch.duration) : 0;
+        const kickProg    = this.state === 'kick'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.kick.duration) : 0;
+        const specialProg = this.state === 'special'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.special.duration) : 0;
+        const hitProg     = this.state === 'hit'
+            ? Math.max(0, 1 - this.stateTimer / 300) : 0;
+
+        switch (this.state) {
+            case 'idle': {
+                // Gentle breathing bob in guard stance
+                const breath = Math.sin(now / 600) * 2.2;
+                crouchOffset  = breath;
+                leftArmAngle  = -dir * 0.18;
+                rightArmAngle =  dir * 0.18;
+                leftLegAngle  = -0.06;
+                rightLegAngle =  0.06;
+                break;
+            }
+            case 'walking': {
+                const t = now / 175;
+                leftLegAngle  =  Math.sin(t) * 0.52;
+                rightLegAngle = -Math.sin(t) * 0.52;
+                leftArmAngle  = -Math.sin(t) * 0.30;
+                rightArmAngle =  Math.sin(t) * 0.30;
+                bodyLeanX     = dir * 3;
+                break;
+            }
+            case 'punch': {
+                const s = Math.sin(punchProg * Math.PI);
+                // Body drives into the punch
+                bodyLeanX     = dir * s * 11;
+                // Front arm shoots fully out; back arm stays in guard
+                rightArmAngle = dir * s * 1.55;
+                leftArmAngle  = -dir * 0.28;
+                // Slight hip twist
+                leftLegAngle  = -dir * 0.08;
+                rightLegAngle =  dir * 0.08;
+                break;
+            }
+            case 'kick': {
+                const s = Math.sin(kickProg * Math.PI);
+                // Roundhouse: kicking leg sweeps up and out
+                rightLegAngle =  dir * s * 1.25;
+                // Body tilts opposite for balance
+                bodyLeanX     = -dir * s * 7;
+                // Arms swing for counterbalance
+                leftArmAngle  =  dir * s * 0.45;
+                rightArmAngle = -dir * s * 0.30;
+                // Rise on support leg at peak
+                crouchOffset  = -s * 5;
+                break;
+            }
+            case 'blocking': {
+                // Crossed-guard: arms raised and crossed in front
+                crouchOffset  =  6;
+                leftArmAngle  =  dir * 1.05;
+                rightArmAngle = -dir * 0.95;
+                leftLegAngle  = -0.10;
+                rightLegAngle =  0.10;
+                break;
+            }
+            case 'special': {
+                // Dramatic charge pose: both arms thrust forward + pulse
+                const pulse   = Math.sin(now / 72) * 0.28;
+                leftArmAngle  = dir * (0.72 + pulse);
+                rightArmAngle = dir * (1.05 + pulse);
+                leftLegAngle  = -0.16;
+                rightLegAngle =  0.16;
+                bodyLeanX     = dir * 6;
+                break;
+            }
+            case 'hit': {
+                // Full-body snap-back recoil
+                bodyLeanX     = -dir * hitProg * 15;
+                headOffX      = -dir * hitProg * 9;
+                headOffY      =  hitProg * 5;
+                leftArmAngle  = -dir * hitProg * 0.55;
+                rightArmAngle = -dir * hitProg * 0.55;
+                break;
+            }
+            case 'jumping': {
+                // Knees pulled up, arms reach forward
+                leftLegAngle  = -0.42;
+                rightLegAngle =  0.42;
+                leftArmAngle  =  dir * 0.25;
+                rightArmAngle = -dir * 0.25;
+                break;
+            }
+            case 'ko': {
+                // Slumped-forward collapse
+                bodyLeanX     = dir * 18;
+                headOffX      = dir * 12;
+                headOffY      =  9;
+                leftArmAngle  =  dir * 0.65;
+                rightArmAngle =  dir * 0.40;
+                leftLegAngle  =  dir * 0.22;
+                rightLegAngle = -dir * 0.16;
+                break;
+            }
         }
 
-        this._drawArm(g, x - 18, shoulderY, armW, armH, leftArmAngle, armColor);
-        this._drawArm(g, x + 18, shoulderY, armW, armH, rightArmAngle, armColor);
+        // ── Layout ───────────────────────────────────────────
+        const legW  = 14;
+        const legH  = 34;
+        const torsoH = 44;
 
-        // ── head ─────────────────────────────────────────────
-        const headCX = x;
-        const headCY = torsoY - Fighter.HEAD_RADIUS - 2;
+        const drawY   = y + crouchOffset;
+        const hipY    = drawY - legH;
+        const torsoY  = hipY - torsoH;
+        const torsoX  = x + bodyLeanX;
+
+        // ── Legs ─────────────────────────────────────────────
+        const legColor = flashing ? 0xff3333 : this.pantsColor;
+        this._drawLeg(g, x - 8, hipY, legW, legH, leftLegAngle,  legColor);
+        this._drawLeg(g, x + 8, hipY, legW, legH, rightLegAngle, legColor);
+
+        // ── Torso ─────────────────────────────────────────────
+        const torsoColor = flashing ? 0xff3333 : this.bodyColor;
+
+        // Shadow under torso for depth
+        g.fillStyle(0x000000, 0.18);
+        g.fillRoundedRect(torsoX - 17, torsoY + 3, 36, torsoH, 6);
+
+        g.fillStyle(torsoColor, 1);
+        g.fillRoundedRect(torsoX - 18, torsoY, 36, torsoH, 6);
+
+        // Subtle highlight stripe
+        g.fillStyle(0xffffff, 0.10);
+        g.fillRoundedRect(torsoX - 18, torsoY, 36, torsoH * 0.45, 6);
+
+        // ── Special: energy orb / glow ────────────────────────
+        if (this.state === 'special' && this._specialCharge > 25) {
+            const ratio  = this._specialCharge / 100;
+            const gAlpha = 0.14 + Math.sin(now / 70) * 0.08;
+            g.fillStyle(0x00CCFF, gAlpha);
+            g.fillCircle(torsoX, torsoY + torsoH * 0.5, 30 + ratio * 10 + Math.sin(now / 80) * 4);
+
+            // Orb at fist tip
+            const orbR = 7 + ratio * 11;
+            const orbX = torsoX + dir * (18 + Math.sin(rightArmAngle) * 28);
+            const orbY = torsoY + 4 + Math.cos(rightArmAngle) * 28;
+            g.fillStyle(0x00EEFF, 0.55 + Math.sin(now / 65) * 0.2);
+            g.fillCircle(orbX, orbY, orbR);
+            g.fillStyle(0xffffff, 0.40);
+            g.fillCircle(orbX - orbR * 0.28, orbY - orbR * 0.28, orbR * 0.40);
+        }
+
+        // ── Arms ─────────────────────────────────────────────
+        const armColor = flashing ? 0xff3333 : this.skinColor;
+        const armW     = 12;
+        const armH     = 30;
+        const shoulderY = torsoY + 4;
+
+        this._drawArm(g, torsoX - 18, shoulderY, armW, armH, leftArmAngle,  armColor);
+        this._drawArm(g, torsoX + 18, shoulderY, armW, armH, rightArmAngle, armColor);
+
+        // Fist knuckle at tip of front arm during punch / kick
+        if (this.state === 'punch' && punchProg > 0.3 && punchProg < 0.85) {
+            const fistX = torsoX + dir * (18 + Math.sin(rightArmAngle) * armH);
+            const fistY = shoulderY + Math.cos(rightArmAngle) * armH;
+            g.fillStyle(flashing ? 0xff3333 : this.skinColor, 1);
+            g.fillCircle(fistX, fistY, 8);
+        }
+
+        // ── Head ─────────────────────────────────────────────
+        const headCX = torsoX + headOffX;
+        const headCY = torsoY - Fighter.HEAD_RADIUS - 2 + headOffY;
 
         if (this.faceImage) {
-            // Position the face image
             this.faceImage.setPosition(headCX, headCY);
             this.faceImage.setAlpha(alpha);
-            if (!this.facingRight) {
-                this.faceImage.setFlipX(true);
+            this.faceImage.setFlipX(!this.facingRight);
+            if (flashing) {
+                this.faceImage.setTint(0xff6666);
             } else {
-                this.faceImage.setFlipX(false);
+                this.faceImage.clearTint();
             }
         } else {
-            // Fallback: solid circle
-            const headColor = flashing ? 0xff4444 : this.skinColor;
+            // Fallback procedural head
+            const headColor = flashing ? 0xff3333 : this.skinColor;
+
+            // Shadow
+            g.fillStyle(0x000000, 0.18);
+            g.fillCircle(headCX + 2, headCY + 2, Fighter.HEAD_RADIUS);
+
             g.fillStyle(headColor, 1);
             g.fillCircle(headCX, headCY, Fighter.HEAD_RADIUS);
-            // Simple face
-            g.fillStyle(0x000000, 0.7);
-            g.fillCircle(headCX - 6, headCY - 4, 3);
-            g.fillCircle(headCX + 6, headCY - 4, 3);
-            g.lineStyle(2, 0x000000, 0.7);
+
+            // Highlight
+            g.fillStyle(0xffffff, 0.14);
+            g.fillCircle(headCX - 6, headCY - 6, Fighter.HEAD_RADIUS * 0.55);
+
+            // Eyes
+            const eyeColor = (this.state === 'hit' || this.state === 'ko') ? 0x555555 : 0x000000;
+            g.fillStyle(eyeColor, 0.75);
+            g.fillCircle(headCX - 7, headCY - 4, 3.5);
+            g.fillCircle(headCX + 7, headCY - 4, 3.5);
+
+            // Expression mouth
+            g.lineStyle(2, 0x000000, 0.65);
             g.beginPath();
-            g.arc(headCX, headCY + 5, 8, 0.1, Math.PI - 0.1);
+            if (this.state === 'hit' || this.state === 'ko') {
+                // Grimace
+                g.arc(headCX, headCY + 9, 7, Math.PI, 0);
+            } else if (this.state === 'punch' || this.state === 'kick' || this.state === 'special') {
+                // Fierce grin
+                g.arc(headCX, headCY + 3, 9, 0.15, Math.PI - 0.15);
+            } else {
+                // Neutral guard
+                g.arc(headCX, headCY + 6, 7, 0.1, Math.PI - 0.1);
+            }
             g.strokePath();
         }
 
-        // KO overlay text
-        if (this.state === 'ko') {
-            g.fillStyle(0x000000, 0.4);
-            g.fillRect(x - 25, y - Fighter.HEIGHT - 20, 50, 20);
-        }
+        // ── Special charge meter (below fighter) ──────────────
+        if (this._specialCharge > 8) {
+            const meterW = 44;
+            const meterH = 6;
+            const meterX = x - meterW / 2;
+            const meterY = y - Fighter.HEIGHT - 16;
+            const fill   = this._specialCharge / 100;
 
-        // Special charge indicator
-        if (this._specialCharge > 10) {
-            const barW = 40 * (this._specialCharge / 100);
-            g.fillStyle(0xFFD700, 0.8);
-            g.fillRect(x - 20, y - Fighter.HEIGHT - 12, barW, 6);
-            g.lineStyle(1, 0xffffff, 0.5);
-            g.strokeRect(x - 20, y - Fighter.HEIGHT - 12, 40, 6);
+            // Background track
+            g.fillStyle(0x001833, 0.7);
+            g.fillRoundedRect(meterX, meterY, meterW, meterH, 3);
+
+            // Fill – cyan/blue gradient approximation via two rects
+            g.fillStyle(0x0088CC, 0.9);
+            g.fillRoundedRect(meterX, meterY, meterW * fill, meterH, 3);
+            g.fillStyle(0x00DDFF, 0.55);
+            g.fillRoundedRect(meterX, meterY, meterW * fill, meterH / 2, 3);
+
+            // Border
+            g.lineStyle(1, 0x0066AA, 0.8);
+            g.strokeRoundedRect(meterX, meterY, meterW, meterH, 3);
         }
     }
 
-    /** Draw a single leg rotated around its top */
+    /** Draw a single leg rotated around its attachment point */
     _drawLeg(g, baseX, topY, w, h, angle, color) {
         g.fillStyle(color, 1);
-        // Simple approximation with a rotated rectangle using matrix
         g.save();
         g.translateCanvas(baseX, topY);
         g.rotateCanvas(angle);
-        g.fillRect(-w / 2, 0, w, h);
+        g.fillRoundedRect(-w / 2, 0, w, h, 3);
         g.restore();
     }
 
-    /** Draw a single arm rotated around its top */
+    /** Draw a single arm rotated around its attachment point */
     _drawArm(g, baseX, topY, w, h, angle, color) {
         g.fillStyle(color, 1);
         g.save();
         g.translateCanvas(baseX, topY);
         g.rotateCanvas(angle);
-        g.fillRect(-w / 2, 0, w, h);
+        g.fillRoundedRect(-w / 2, 0, w, h, 3);
         g.restore();
     }
 

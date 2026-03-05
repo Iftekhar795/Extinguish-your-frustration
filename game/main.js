@@ -6,8 +6,8 @@
  */
 
 // ── Phaser configuration ──────────────────────────────────────
-const GAME_WIDTH  = 900;
-const GAME_HEIGHT = 500;
+const GAME_WIDTH  = 480;
+const GAME_HEIGHT = 760;
 
 const phaserConfig = {
     type: Phaser.AUTO,
@@ -15,6 +15,10 @@ const phaserConfig = {
     height: GAME_HEIGHT,
     parent: 'game-container',
     backgroundColor: '#0a0a1a',
+    scale: {
+        mode:       Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
     physics: {
         default: 'arcade',
         arcade: { gravity: { y: 0 }, debug: false },
@@ -209,7 +213,7 @@ function startFight() {
 
     // Hide setup, show game
     qs('#setup-screen').style.display = 'none';
-    qs('#game-screen').style.display  = 'block';
+    qs('#game-screen').style.display  = 'flex';
 
     // Show/wire mobile controls (no-op on desktop)
     setupMobileControls();

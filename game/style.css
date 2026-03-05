@@ -8,16 +8,18 @@
 }
 
 :root {
-    --bg-dark:    #0a0a1a;
-    --bg-panel:   #12122a;
-    --bg-card:    #1a1a35;
+    --bg-dark:    #070714;
+    --bg-panel:   #0f0f25;
+    --bg-card:    #16163a;
     --accent:     #FF6B35;
     --accent2:    #FFD700;
+    --accent3:    #5DD8FF;
     --text:       #e8e8f0;
-    --text-muted: #888899;
-    --border:     #2a2a4a;
+    --text-muted: #7a7a99;
+    --border:     #262650;
     --success:    #2ECC71;
     --error:      #E74C3C;
+    --card-glow:  rgba(93, 216, 255, 0.06);
 }
 
 html, body {
@@ -25,51 +27,52 @@ html, body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background: var(--bg-dark);
     color: var(--text);
-    /* Prevent rubber-band scroll on iOS */
     overscroll-behavior: none;
-    /* Prevent pull-to-refresh (Chrome Android) */
     overscroll-behavior-y: contain;
     touch-action: manipulation;
 }
 
-/* ── Setup Screen ──────────────────────────────────────── */
+/* ── Setup Screen ────────────────────────────────────────── */
 #setup-screen {
     display: flex;
     flex-direction: column;
     align-items: center;
     min-height: 100vh;
     min-height: -webkit-fill-available;
-    padding: 20px 20px env(safe-area-inset-bottom, 20px);
-    background: linear-gradient(135deg, #0a0a1a 0%, #16163a 50%, #0a0a1a 100%);
+    padding: 24px 16px env(safe-area-inset-bottom, 24px);
+    background:
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(93,216,255,0.07) 0%, transparent 70%),
+        linear-gradient(160deg, #07071a 0%, #141440 55%, #07071a 100%);
 }
 
 /* Title */
 .game-title {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 28px;
 }
 
 .game-title h1 {
-    font-size: clamp(28px, 5vw, 48px);
+    font-size: clamp(28px, 6vw, 52px);
     font-weight: 900;
-    letter-spacing: 2px;
-    background: linear-gradient(90deg, #FF6B35, #FFD700, #FF6B35);
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, #FF6B35 0%, #FFD700 45%, #FF6B35 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    text-shadow: none;
+    filter: drop-shadow(0 0 18px rgba(255,107,53,0.35));
 }
 
 .game-title p {
     color: var(--text-muted);
-    font-size: 14px;
-    margin-top: 6px;
+    font-size: 13px;
+    margin-top: 8px;
+    letter-spacing: 0.5px;
 }
 
 /* Fighter columns */
 .fighters-row {
     display: flex;
-    gap: 20px;
+    gap: 16px;
     width: 100%;
     max-width: 900px;
     margin-bottom: 20px;
@@ -79,17 +82,18 @@ html, body {
 
 .fighter-card {
     flex: 1;
-    min-width: 280px;
+    min-width: 270px;
     max-width: 420px;
-    background: var(--bg-card);
+    background: linear-gradient(160deg, var(--bg-card) 0%, rgba(22,22,58,0.9) 100%);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 14px;
+    padding: 18px;
     position: relative;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 .fighter-card h2 {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     margin-bottom: 14px;
     display: flex;
@@ -97,8 +101,10 @@ html, body {
     gap: 8px;
 }
 
-.fighter-card.player-card h2 { color: #4FC3F7; }
-.fighter-card.enemy-card  h2 { color: #FF6B6B; }
+.fighter-card.player-card { border-color: rgba(93,216,255,0.25); box-shadow: 0 4px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(93,216,255,0.08); }
+.fighter-card.enemy-card  { border-color: rgba(255,107,107,0.22); box-shadow: 0 4px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,107,107,0.08); }
+.fighter-card.player-card h2 { color: #5DD8FF; }
+.fighter-card.enemy-card  h2 { color: #FF7070; }
 
 /* Drop zone */
 .drop-zone {
@@ -235,16 +241,17 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 900;
     color: var(--accent);
     padding: 10px 0;
+    text-shadow: 0 0 12px rgba(255,107,53,0.5);
 }
 
 /* Arena / difficulty / controls row */
 .controls-row {
     display: flex;
-    gap: 20px;
+    gap: 16px;
     width: 100%;
     max-width: 900px;
     flex-wrap: wrap;
@@ -253,33 +260,36 @@ html, body {
 }
 
 .control-group {
-    background: var(--bg-card);
+    background: linear-gradient(160deg, var(--bg-card) 0%, rgba(22,22,58,0.9) 100%);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 20px;
+    border-radius: 12px;
+    padding: 14px 18px;
     flex: 1;
-    min-width: 200px;
+    min-width: 190px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
 }
 
 .control-group label {
     display: block;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-muted);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
 
 .control-group select {
     width: 100%;
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--text);
     padding: 8px 10px;
     font-size: 14px;
     outline: none;
     cursor: pointer;
-    /* Comfortable touch target */
     min-height: 44px;
+    transition: border-color 0.2s;
 }
 .control-group select:focus { border-color: var(--accent); }
 
@@ -294,23 +304,25 @@ html, body {
 }
 
 #start-fight-btn {
-    padding: 16px 60px;
-    font-size: 22px;
+    padding: 16px 64px;
+    font-size: 21px;
     font-weight: 900;
-    letter-spacing: 2px;
-    background: linear-gradient(90deg, #FF6B35, #FF9F43);
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, #FF5511 0%, #FF9F43 50%, #FF5511 100%);
+    background-size: 200% auto;
     color: #fff;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
-    box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+    transition: transform 0.15s, box-shadow 0.15s, background-position 0.4s;
+    box-shadow: 0 4px 24px rgba(255,107,53,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
 }
 #start-fight-btn:hover {
+    background-position: right center;
     transform: translateY(-2px);
-    box-shadow: 0 8px 28px rgba(255,107,53,0.55);
+    box-shadow: 0 8px 32px rgba(255,107,53,0.60);
 }
 #start-fight-btn:active { transform: translateY(0); }
 
@@ -370,27 +382,37 @@ html, body {
 
 /* ── Game Screen ──────────────────────────────────────────── */
 #game-screen {
+    /* Hidden by default; shown as flex when fight starts */
     display: none;
-    /* Fill the entire viewport so black background covers any gap */
     position: fixed;
     inset: 0;
     background: #000;
-    /* Prevent any touch scroll inside the game */
     touch-action: none;
     overflow: hidden;
+    /* Portrait centering – layout applied when display:flex is set by JS */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 #game-container {
+    /* Fill the available space so Scale.FIT can center within it */
     width: 100%;
-    line-height: 0; /* remove inline-block gap under canvas */
+    height: 100%;
+    line-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #game-container canvas {
     display: block;
-    /* CSS-level scaling: fill container width, preserve aspect ratio */
-    width: 100% !important;
-    height: auto !important;
     touch-action: none;
+    /* Portrait: constrain so canvas fits within viewport in both axes.
+       480/760 ≈ 0.6316  →  width = min(100vw, 63.16vh) */
+    width:      min(100vw, 63.16vh) !important;
+    height:     auto                !important;
+    max-height: 100vh               !important;
 }
 
 /* ── Mobile virtual controls ─────────────────────────────── */
