@@ -4,22 +4,174 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extinguish Your Frustration — 2D Endless Runner</title>
-    <meta http-equiv="refresh" content="0; url=game/index.html">
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: Arial, sans-serif;
-            background: #1e3a5f;
-            color: #fff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2d6a4f 100%);
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
+            padding: 24px;
         }
-        a { color: #FCD34D; font-size: 1.2em; }
+
+        .card {
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 16px;
+            box-shadow: 0 16px 64px rgba(0, 0, 0, 0.45);
+            padding: 48px 40px;
+            max-width: 560px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .emoji { font-size: 64px; margin-bottom: 16px; display: block; }
+
+        h1 {
+            font-size: 28px;
+            color: #1e3a5f;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #64748b;
+            margin-bottom: 32px;
+        }
+
+        /* Big play button */
+        .play-btn {
+            display: inline-block;
+            padding: 18px 48px;
+            background: #2563EB;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 700;
+            text-decoration: none;
+            border-radius: 10px;
+            transition: background 0.2s ease, transform 0.1s ease;
+            margin-bottom: 32px;
+        }
+        .play-btn:hover  { background: #1d4ed8; }
+        .play-btn:active { transform: scale(0.97); }
+
+        /* Controls cheat-sheet */
+        .controls-box {
+            background: #eff6ff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 28px;
+            text-align: left;
+        }
+        .controls-box h2 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e40af;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+        .controls-box table { width: 100%; border-collapse: collapse; }
+        .controls-box td {
+            padding: 5px 8px;
+            font-size: 14px;
+            color: #1e3a5f;
+            border-bottom: 1px solid #dbeafe;
+        }
+        .controls-box td:first-child { font-weight: 600; }
+        .controls-box tr:last-child td { border-bottom: none; }
+
+        /* Feature list */
+        .features {
+            text-align: left;
+            margin-bottom: 28px;
+        }
+        .features h2 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #166534;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+        .features ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .features li {
+            font-size: 14px;
+            color: #374151;
+            display: flex;
+            gap: 8px;
+        }
+        .features li::before { content: '✓'; color: #22c55e; font-weight: 700; }
+
+        /* Local instructions */
+        .local {
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .local strong { color: #1e3a5f; }
+
+        .github-link {
+            display: inline-block;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #2563EB;
+            text-decoration: none;
+        }
+        .github-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <p>Redirecting to game… <a href="game/index.html">Click here if not redirected.</a></p>
+    <div class="card">
+        <span class="emoji">🎮</span>
+        <h1>Extinguish Your Frustration</h1>
+        <p class="subtitle">A 2D endless runner — dodge obstacles, outrun the enemy!</p>
+
+        <a href="game/index.html" class="play-btn">▶ Play Now</a>
+
+        <div class="controls-box">
+            <h2>Controls</h2>
+            <table>
+                <tr>
+                    <td>Space / W / ↑ / Tap</td>
+                    <td>Jump</td>
+                </tr>
+                <tr>
+                    <td>R / Tap (after game-over)</td>
+                    <td>Restart</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="features">
+            <h2>Features</h2>
+            <ul>
+                <li>Auto-running player — just jump over everything</li>
+                <li>AI enemy that chases you and mirrors your jumps</li>
+                <li>Upload your own PNG/JPG for player &amp; enemy</li>
+                <li>Sprite sheet support (set frame size + count)</li>
+                <li>Smooth squash/stretch animation for single images</li>
+                <li>Difficulty scales as your score increases</li>
+            </ul>
+        </div>
+
+        <p class="local">
+            <strong>Playing offline?</strong> Download or clone this repository, then
+            open <code>game/index.html</code> in your browser — no server or install needed.
+        </p>
+
+        <a class="github-link"
+           href="https://github.com/Iftekhar795/Extinguish-your-frustration"
+           target="_blank" rel="noopener">
+            View source on GitHub ↗
+        </a>
+    </div>
 </body>
 </html>
