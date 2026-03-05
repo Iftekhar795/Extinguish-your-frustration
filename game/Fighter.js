@@ -521,15 +521,22 @@ class Fighter {
                 break;
             }
             case 'punch': {
-                // Sharp straight jab: body drives forward, lead arm extends fully
-                const s = Math.sin(punchProg * Math.PI);
-                bodyLeanX     = dir * s * 13;
-                rightArmAngle = dir * s * 1.62;  // full extension
-                leftArmAngle  = dir * 0.35;       // guard arm up
-                leftLegAngle  = -dir * 0.10;
-                rightLegAngle =  dir * 0.10;
-                headOffX      = dir * s * 5;
-                crouchOffset  = s * 3;
+                // Two-phase punch: wind-up (cock back) → explosive drive → retract
+                // punchProg 0→0.18 = wind-up, 0.18→0.70 = drive, 0.70→1 = retract
+                const windUp = Math.max(0, Math.min(1, punchProg / 0.18));
+                const drive  = Math.max(0, Math.min(1, (punchProg - 0.18) / 0.52));
+                const driveS = Math.sin(drive * Math.PI);
+                // During wind-up: shoulder pulls back slightly
+                const windBack = Math.sin(windUp * Math.PI * 0.5) * 0.4;
+                rightArmAngle = dir * (driveS * 1.72 - windBack);
+                leftArmAngle  = dir * (0.35 + windBack * 0.3);
+                bodyLeanX     = dir * (driveS * 16 - windBack * 4);
+                headOffX      = dir * driveS * 6;
+                leftLegAngle  = -dir * 0.12;
+                rightLegAngle =  dir * 0.12;
+                crouchOffset  = driveS * 4;
+                // _punchPhase used for motion-trail rendering below
+                this._punchDriveS = driveS;
                 break;
             }
             case 'kick': {
@@ -798,11 +805,31 @@ class Fighter {
         g.fillCircle(torsoX - 18, shoulderY + 3, 5);
         g.fillCircle(torsoX + 18, shoulderY + 3, 5);
 
+        // ── Punch motion trail (ghost arms) ──────────────────
+        if (this.state === 'punch' && (this._punchDriveS || 0) > 0.18) {
+            const trailS = this._punchDriveS;
+            for (let t = 1; t <= 3; t++) {
+                const trailAngle = dir * Math.sin(Math.max(0, trailS - t * 0.16) * Math.PI) * 1.72;
+                const trailAlpha = (0.18 - t * 0.04) * trailS;
+                if (trailAlpha <= 0) break;
+                g.fillStyle(0xffffff, trailAlpha);
+                // Simplified arm as rectangle in the trail
+                const trailEndX = torsoX + dir * 18 + Math.sin(trailAngle) * armH;
+                const trailEndY = shoulderY + Math.cos(trailAngle) * armH;
+                g.beginPath();
+                g.moveTo(torsoX + dir * (18 - armW / 2), shoulderY);
+                g.lineTo(torsoX + dir * (18 + armW / 2), shoulderY);
+                g.lineTo(trailEndX + dir * armW / 2, trailEndY);
+                g.lineTo(trailEndX - dir * armW / 2, trailEndY);
+                g.closePath(); g.fillPath();
+            }
+        }
+
         this._drawArm(g, torsoX - 18, shoulderY, armW, armH, leftArmAngle,  armColor);
         this._drawArm(g, torsoX + 18, shoulderY, armW, armH, rightArmAngle, armColor);
 
         // Fist knuckle at tip of front arm during attacks
-        const showFist = (this.state === 'punch'       && punchProg       > 0.30 && punchProg       < 0.85)
+        const showFist = (this.state === 'punch'       && punchProg       > 0.22 && punchProg       < 0.88)
                       || (this.state === 'crouchPunch' && crouchPunchProg > 0.30 && crouchPunchProg < 0.85)
                       || (this.state === 'jumpPunch'   && jumpPunchProg   > 0.28 && jumpPunchProg   < 0.88)
                       || (this.state === 'shoryuken'   && shoryukenProg   > 0.15 && shoryukenProg   < 0.75);
@@ -813,7 +840,23 @@ class Fighter {
                 ? (flashing ? 0xff3333 : 0xFFAA00)
                 : (flashing ? 0xff3333 : this.skinColor);
             g.fillStyle(fistColor, 1);
-            g.fillCircle(fistX, fistY, this.state === 'shoryuken' ? 10 : 8);
+            g.fillCircle(fistX, fistY, this.state === 'shoryuken' ? 10 : 9);
+            // Knuckle wraps (dark stripes over the fist)
+            if (this.state !== 'shoryuken') {
+                g.fillStyle(0x000000, 0.30);
+                for (let ki = 0; ki < 3; ki++) {
+                    g.fillRect(fistX - 4 + ki * 3, fistY - 5, 2, 10);
+                }
+            }
+            // Impact spark on peak drive
+            const driveS = this._punchDriveS || 0;
+            if (driveS > 0.55 && driveS < 0.78) {
+                const sparkSize = (driveS - 0.55) / 0.23 * 12;
+                g.fillStyle(0xFFFFAA, 0.55);
+                g.fillCircle(fistX + dir * sparkSize, fistY, sparkSize * 0.7);
+                g.fillStyle(0xFFDD44, 0.80);
+                g.fillCircle(fistX + dir * sparkSize * 0.6, fistY, sparkSize * 0.35);
+            }
             if (this.state === 'shoryuken') {
                 // Extra energy ring on fist
                 g.lineStyle(2, 0xFFFF00, 0.7);
@@ -830,6 +873,11 @@ class Fighter {
             const bootY = hipY  + Math.cos(rightLegAngle) * legH;
             g.fillStyle(flashing ? 0xff3333 : this.pantsColor, 1);
             g.fillCircle(bootX, bootY, 9);
+        }
+
+        // ── Blocking shield ──────────────────────────────────
+        if (this.state === 'blocking') {
+            this._drawShield(g, torsoX, torsoY, torsoH, dir, flashing);
         }
 
         // ── Head ─────────────────────────────────────────────
@@ -865,11 +913,30 @@ class Fighter {
             g.fillStyle(0xffffff, 0.14);
             g.fillCircle(headCX - 6, headCY - 6, Fighter.HEAD_RADIUS * 0.55);
 
+            // Headband / hair tuft on top
+            if (!flashing) {
+                // Dark hair
+                g.fillStyle(0x1a0a00, 0.85);
+                g.fillEllipse(headCX, headCY - Fighter.HEAD_RADIUS * 0.60,
+                    Fighter.HEAD_RADIUS * 1.55, Fighter.HEAD_RADIUS * 0.65);
+                // Coloured headband stripe
+                g.fillStyle(this.bodyColor, 0.90);
+                g.fillRect(headCX - Fighter.HEAD_RADIUS * 0.80,
+                           headCY - Fighter.HEAD_RADIUS * 0.30,
+                           Fighter.HEAD_RADIUS * 1.60, 5);
+            }
+
             // Eyes
             const eyeColor = (this.state === 'hit' || this.state === 'ko') ? 0x555555 : 0x000000;
             g.fillStyle(eyeColor, 0.75);
             g.fillCircle(headCX - 7, headCY - 4, 3.5);
             g.fillCircle(headCX + 7, headCY - 4, 3.5);
+            // Eye whites / pupils
+            if (this.state !== 'hit' && this.state !== 'ko') {
+                g.fillStyle(0xffffff, 0.65);
+                g.fillCircle(headCX - 7 + dir, headCY - 5, 1.5);
+                g.fillCircle(headCX + 7 + dir, headCY - 5, 1.5);
+            }
 
             // Expression mouth
             g.lineStyle(2, 0x000000, 0.65);
@@ -911,6 +978,64 @@ class Fighter {
         }
     }
 
+    /** Draw a kite shield held in front of the fighter while blocking */
+    _drawShield(g, torsoX, torsoY, torsoH, dir, flashing) {
+        // Shield is held on the forward arm side, in front of the body
+        const shieldCX = torsoX + dir * 28;
+        const shieldCY = torsoY + torsoH * 0.28;
+        const shW      = 16;   // half-width of shield
+        const shH      = 30;   // half-height of shield
+
+        // Drop shadow
+        g.fillStyle(0x000000, 0.30);
+        g.beginPath();
+        g.moveTo(shieldCX + dir * 2 + 2, shieldCY - shH + 2);
+        g.lineTo(shieldCX + dir * shW + 2, shieldCY + 2);
+        g.lineTo(shieldCX + dir * 2 + 2, shieldCY + shH + 2);
+        g.lineTo(shieldCX - dir * shW + 2, shieldCY + 2);
+        g.closePath(); g.fillPath();
+
+        // Main kite shape: top two diagonals + bottom point
+        const shieldColor = flashing ? 0xff3333 : 0x4a4a6a;
+        g.fillStyle(shieldColor, 1);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);          // top centre
+        g.lineTo(shieldCX + dir * shW, shieldCY);    // right side
+        g.lineTo(shieldCX, shieldCY + shH);           // bottom point
+        g.lineTo(shieldCX - dir * shW, shieldCY);    // left side
+        g.closePath(); g.fillPath();
+
+        // Rim / border
+        g.lineStyle(3, flashing ? 0xff9999 : 0x8a8aaa, 1);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);
+        g.lineTo(shieldCX + dir * shW, shieldCY);
+        g.lineTo(shieldCX, shieldCY + shH);
+        g.lineTo(shieldCX - dir * shW, shieldCY);
+        g.closePath(); g.strokePath();
+
+        // Horizontal cross-bar
+        g.lineStyle(2, flashing ? 0xff9999 : 0x7a7a9a, 0.75);
+        g.beginPath();
+        g.moveTo(shieldCX - dir * shW + 2, shieldCY);
+        g.lineTo(shieldCX + dir * shW - 2, shieldCY);
+        g.strokePath();
+
+        // Central boss (rounded knob)
+        g.fillStyle(flashing ? 0xff9999 : 0xAAAAAA, 1);
+        g.fillCircle(shieldCX, shieldCY, 5);
+        g.fillStyle(0xffffff, 0.35);
+        g.fillCircle(shieldCX - 1, shieldCY - 1, 2);
+
+        // Shield surface shading (lighter left half)
+        g.fillStyle(0xffffff, 0.08);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);
+        g.lineTo(shieldCX + dir * shW, shieldCY);
+        g.lineTo(shieldCX, shieldCY);
+        g.closePath(); g.fillPath();
+    }
+
     /** Draw a single leg rotated around its attachment point */
     _drawLeg(g, baseX, topY, w, h, angle, color, bootColor) {
         g.save();
@@ -941,6 +1066,10 @@ class Fighter {
         // Highlight strip (gives cylindrical look)
         g.fillStyle(0xffffff, 0.18);
         g.fillRoundedRect(-w / 2 + 2, 2, w / 2 - 1, h * 0.62, 3);
+        // Forearm tape/wraps — two dark bands near the fist end
+        g.fillStyle(0x000000, 0.22);
+        g.fillRect(-w / 2 + 1, h * 0.70, w - 2, 3);
+        g.fillRect(-w / 2 + 1, h * 0.80, w - 2, 3);
         g.restore();
     }
 

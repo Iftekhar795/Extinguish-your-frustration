@@ -36,6 +36,30 @@ const ARENAS = [
         clouds: true,
         particles: true,
     },
+    {
+        name: 'Night City Rooftop',
+        bgColor:    0x05050F,
+        floorColor: 0x2A2A3A,
+        accentColor: 0x00FFCC,
+        clouds: false,
+        particles: false,
+    },
+    {
+        name: 'Volcanic Crater',
+        bgColor:    0x1A0500,
+        floorColor: 0x3A1000,
+        accentColor: 0xFF4400,
+        clouds: false,
+        particles: true,
+    },
+    {
+        name: 'Ancient Colosseum',
+        bgColor:    0x1C1408,
+        floorColor: 0xB8956A,
+        accentColor: 0xFFD700,
+        clouds: true,
+        particles: false,
+    },
 ];
 
 class FightScene extends Phaser.Scene {
@@ -322,7 +346,7 @@ class FightScene extends Phaser.Scene {
             // ── Audience silhouettes ──────────────────────────
             this._drawAudience(g, W, groundY, 0x0a0218, 0.80);
 
-        } else {
+        } else if (a.name === 'Arctic Peak') {
             // ── Arctic Peak ───────────────────────────────────
 
             // Aurora curtains (semi-transparent overlapping ellipses)
@@ -370,6 +394,164 @@ class FightScene extends Phaser.Scene {
 
             // ── Audience silhouettes ──────────────────────────
             this._drawAudience(g, W, groundY, 0x040e1a, 0.80);
+
+        } else if (a.name === 'Night City Rooftop') {
+            // ── Night City Rooftop ────────────────────────────
+
+            // City skyline — layered buildings in perspective
+            // Far layer (dim, tall skyscrapers)
+            g.fillStyle(0x080812, 0.90);
+            [[0,       0.72, W*0.12], [W*0.10, 0.58, W*0.09], [W*0.18, 0.80, W*0.10],
+             [W*0.27,  0.62, W*0.08], [W*0.34, 0.75, W*0.11], [W*0.44, 0.55, W*0.08],
+             [W*0.51,  0.82, W*0.12], [W*0.62, 0.60, W*0.09], [W*0.70, 0.70, W*0.11],
+             [W*0.80,  0.50, W*0.10], [W*0.89, 0.78, W*0.11]].forEach(([bx, bh, bw]) => {
+                g.fillRect(bx, groundY - groundY * bh, bw, groundY * bh);
+            });
+
+            // Building windows (teal/cyan neon glow dots)
+            for (let row = 0; row < 6; row++) {
+                for (let col = 0; col < 22; col++) {
+                    if ((col * 7 + row * 3) % 5 === 0) continue; // random dark windows
+                    const wx = W * (col / 22) + W * 0.02;
+                    const wy = groundY * 0.15 + row * groundY * 0.08;
+                    g.fillStyle(a.accentColor, 0.15 + ((col * row) % 4) * 0.05);
+                    g.fillRect(wx, wy, 3, 4);
+                }
+            }
+
+            // Neon sign blobs (large glowing patches)
+            [[W * 0.08, groundY * 0.35, 0xFF00AA], [W * 0.55, groundY * 0.28, 0x00FFCC],
+             [W * 0.80, groundY * 0.40, 0xFF4466]].forEach(([nx, ny, nc]) => {
+                g.fillStyle(nc, 0.08);
+                g.fillEllipse(nx, ny, W * 0.20, groundY * 0.12);
+                g.fillStyle(nc, 0.18);
+                g.fillEllipse(nx, ny, W * 0.08, groundY * 0.05);
+            });
+
+            // Rooftop fence/railing
+            g.fillStyle(0x2a2a3a, 0.90);
+            g.fillRect(0, groundY - 14, W, 14);
+            for (let i = 0; i <= 14; i++) {
+                g.fillRect(W * (i / 14) - 2, groundY - 28, 4, 16);
+            }
+
+            // Audience silhouettes
+            this._drawAudience(g, W, groundY, 0x030308, 0.85);
+
+        } else if (a.name === 'Volcanic Crater') {
+            // ── Volcanic Crater ───────────────────────────────
+
+            // Distant volcano cones
+            g.fillStyle(0x1a0800, 0.88);
+            [[0, 0.58, W*0.32], [W*0.30, 0.48, W*0.28], [W*0.58, 0.66, W*0.36], [W*0.78, 0.42, W*0.24]].forEach(([vx, vh, vw]) => {
+                g.beginPath(); g.moveTo(vx, groundY);
+                g.lineTo(vx + vw / 2, groundY - groundY * vh);
+                g.lineTo(vx + vw, groundY); g.closePath(); g.fillPath();
+            });
+
+            // Glowing calderas (craters with orange/red inner glow)
+            [[W * 0.12, groundY * 0.35], [W * 0.62, groundY * 0.30]].forEach(([cx, cy]) => {
+                g.fillStyle(0xFF2200, 0.06);
+                g.fillCircle(cx, cy, W * 0.12);
+                g.fillStyle(0xFF6600, 0.10);
+                g.fillCircle(cx, cy, W * 0.06);
+                g.fillStyle(0xFFAA00, 0.14);
+                g.fillCircle(cx, cy, W * 0.03);
+            });
+
+            // Lava rivers (diagonal cracks emitting orange light)
+            [[W * 0.05, groundY * 0.70, W * 0.22, groundY * 0.90],
+             [W * 0.72, groundY * 0.65, W * 0.90, groundY * 0.88]].forEach(([x1, y1, x2, y2]) => {
+                g.lineStyle(5, 0xFF4400, 0.20);
+                g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
+                g.lineStyle(2, 0xFF8800, 0.35);
+                g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
+            });
+
+            // Rocks/boulders on stage edges
+            g.fillStyle(0x2a0a00, 0.88);
+            for (let i = 0; i < 4; i++) {
+                const rx = W * (i < 2 ? i * 0.07 : 0.90 + (i - 2) * 0.05);
+                g.fillEllipse(rx, groundY, W * 0.07, groundY * 0.06);
+            }
+
+            // Smoke / embers rising (static puffs)
+            g.fillStyle(0x331100, 0.30);
+            [[W*0.12, groundY*0.22], [W*0.38, groundY*0.14], [W*0.62, groundY*0.20]].forEach(([sx, sy]) => {
+                g.fillCircle(sx, sy, W * 0.06);
+                g.fillCircle(sx + W * 0.03, sy - groundY * 0.04, W * 0.04);
+            });
+
+            // Audience silhouettes
+            this._drawAudience(g, W, groundY, 0x180500, 0.88);
+
+        } else {
+            // ── Ancient Colosseum ─────────────────────────────
+
+            // Sky gradient hint – orange-tinted sunset behind columns
+            g.fillStyle(0x3a2000, 0.25);
+            g.fillRect(0, 0, W, groundY);
+
+            // Distant outer wall arch row
+            g.fillStyle(0x2a1e0a, 0.75);
+            g.fillRect(0, groundY - groundY * 0.60, W, groundY * 0.60);
+
+            // Arched openings cut into the wall
+            for (let i = 0; i < 7; i++) {
+                const archX = W * (i / 7) + W * 0.04;
+                const archW  = W * 0.08;
+                const archTopY = groundY - groundY * 0.57;
+                const archH    = groundY * 0.30;
+                g.fillStyle(a.bgColor, 0.88);
+                g.fillRect(archX, archTopY, archW, archH - archW / 2);
+                g.fillEllipse(archX + archW / 2, archTopY, archW, archW);
+            }
+
+            // Stone column row (foreground left & right)
+            g.fillStyle(0x3d2e14, 0.85);
+            [[W * 0.02, W * 0.055], [W * 0.10, W * 0.055],
+             [W * 0.86, W * 0.055], [W * 0.94, W * 0.055]].forEach(([colX, colW]) => {
+                g.fillRect(colX, groundY - groundY * 0.52, colW, groundY * 0.52);
+                // Capital
+                g.fillRect(colX - colW * 0.18, groundY - groundY * 0.52, colW * 1.36, groundY * 0.04);
+                // Base
+                g.fillRect(colX - colW * 0.12, groundY - groundY * 0.04, colW * 1.24, groundY * 0.04);
+                // Fluting lines
+                g.lineStyle(1, 0x2a1e0a, 0.50);
+                for (let fl = 1; fl <= 3; fl++) {
+                    const fx = colX + colW * fl / 4;
+                    g.beginPath(); g.moveTo(fx, groundY - groundY * 0.50); g.lineTo(fx, groundY - groundY * 0.04); g.strokePath();
+                }
+            });
+
+            // Golden banner strips hanging between columns
+            [[W * 0.16, groundY * 0.20], [W * 0.60, groundY * 0.22]].forEach(([bx, by]) => {
+                g.fillStyle(a.accentColor, 0.30);
+                g.fillRect(bx, by, W * 0.22, groundY * 0.06);
+                g.lineStyle(1, a.accentColor, 0.50);
+                g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + W * 0.22, by); g.strokePath();
+                g.beginPath(); g.moveTo(bx, by + groundY * 0.06); g.lineTo(bx + W * 0.22, by + groundY * 0.06); g.strokePath();
+            });
+
+            // Sand floor texture (horizontal striations)
+            g.lineStyle(1, 0xC8A060, 0.12);
+            for (let i = 1; i <= 4; i++) {
+                const fy = groundY + (20 - groundY) * (i / 5);
+                if (fy > groundY) {
+                    g.beginPath(); g.moveTo(0, fy); g.lineTo(W, fy); g.strokePath();
+                }
+            }
+
+            // Audience silhouettes (packed crowd above the wall)
+            g.fillStyle(0x1a1005, 0.80);
+            const spacing = W / 28;
+            for (let i = 0; i < 28; i++) {
+                const hx = spacing * (i + 0.5);
+                const jitter = Math.sin(i * 2.1) * 4;
+                const rowY  = groundY - groundY * 0.62 + jitter;
+                g.fillCircle(hx, rowY - 6,  5);
+                g.fillRect(hx - 4, rowY - 1, 8, 8);
+            }
         }
     }
 
