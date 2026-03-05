@@ -253,6 +253,35 @@ window.addEventListener('DOMContentLoaded', () => {
         handleFaceUpload('player-sprite', 'player-face-preview', 'player');
     });
 
+    // Selfie (camera) shortcut for the player – opens front camera directly on mobile
+    const selfieBtn = qs('#player-selfie-btn');
+    const cameraInput = qs('#player-camera-input');
+    if (selfieBtn && cameraInput) {
+        selfieBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cameraInput.value = ''; // allow re-capturing the same photo
+            cameraInput.click();
+        });
+        // Auto-upload as soon as a photo is captured
+        cameraInput.addEventListener('change', () => {
+            handleFaceUpload('player-camera-input', 'player-face-preview', 'player');
+        });
+    }
+
+    // Auto-upload from gallery file picker when a file is chosen
+    // Also clear value so the same file can be re-selected (consistent with camera input)
+    const galleryInput = qs('#player-sprite');
+    if (galleryInput) {
+        galleryInput.addEventListener('click', () => {
+            galleryInput.value = ''; // allow re-selecting the same file
+        });
+        galleryInput.addEventListener('change', () => {
+            if (galleryInput.files && galleryInput.files[0]) {
+                handleFaceUpload('player-sprite', 'player-face-preview', 'player');
+            }
+        });
+    }
+
     qs('#load-enemy-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         handleFaceUpload('enemy-sprite', 'enemy-face-preview', 'enemy');

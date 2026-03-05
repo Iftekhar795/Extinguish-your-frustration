@@ -36,18 +36,27 @@
         <div class="fighter-card player-card">
             <h2>🎮 Your Fighter</h2>
 
-            <!-- Face drop zone (tap on mobile, drop on desktop) -->
+            <!-- Face drop zone (tap on mobile opens gallery picker; drop on desktop) -->
             <div id="player-drop-zone" class="drop-zone">
                 <img id="player-face-preview" class="face-preview" alt="Player face preview">
                 <div class="drop-label drop-desktop">📷 Drop your selfie here or click to browse</div>
-                <div class="drop-label drop-mobile">📷 Tap to take a photo or choose from gallery</div>
+                <div class="drop-label drop-mobile">🖼️ Tap to choose from gallery</div>
                 <div class="hint">JPG / PNG / GIF · Any size</div>
             </div>
 
+            <!-- Gallery file picker (no capture – shows full OS file/gallery picker) -->
             <div class="form-row">
-                <label for="player-sprite">Select file</label>
-                <input type="file" id="player-sprite" accept="image/*" capture="user">
+                <label for="player-sprite">Gallery</label>
+                <input type="file" id="player-sprite" accept="image/*">
                 <button class="btn btn-primary" id="load-player-btn">Upload</button>
+            </div>
+
+            <!-- Camera selfie shortcut (mobile only – opens front camera directly) -->
+            <input type="file" id="player-camera-input" accept="image/*" capture="user" style="display:none">
+            <div class="form-row mobile-only">
+                <button class="btn btn-ghost" id="player-selfie-btn" style="width:100%">
+                    📸 Take a Selfie (Camera)
+                </button>
             </div>
 
             <!-- Customisation -->
