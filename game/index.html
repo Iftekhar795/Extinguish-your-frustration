@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Prevent pinch-zoom and double-tap-zoom on mobile; cover notch area -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Face Fighter 🥊</title>
+    <!-- Phaser 3 (local bundle; CDN fallback) -->
+    <script src="phaser.min.js"></script>
+    <script>
+        if (typeof Phaser === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"><\/script>');
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     SETUP SCREEN  (shown on load)
+═══════════════════════════════════════════════════════════ -->
+<div id="setup-screen">
+
+    <!-- Title -->
+    <div class="game-title">
+        <h1>⚡ FACE FIGHTER ⚡</h1>
+        <p>Upload your face. Pick your fighter. Settle the score.</p>
+    </div>
+
+    <!-- Fighter configuration cards -->
+    <div class="fighters-row">
+
+        <!-- Player card -->
+        <div class="fighter-card player-card">
+            <h2>🎮 Your Fighter</h2>
+
+            <!-- Face drop zone (tap on mobile opens gallery picker; drop on desktop) -->
+            <div id="player-drop-zone" class="drop-zone">
+                <img id="player-face-preview" class="face-preview" alt="Player face preview">
+                <div class="drop-label drop-desktop">📷 Drop your selfie here or click to browse</div>
+                <div class="drop-label drop-mobile">🖼️ Tap to choose from gallery</div>
+                <div class="hint">JPG / PNG / GIF · Any size</div>
+            </div>
+
+            <!-- Gallery file picker (no capture – shows full OS file/gallery picker) -->
+            <div class="form-row">
+                <label for="player-sprite">Gallery</label>
+                <input type="file" id="player-sprite" accept="image/*">
+                <button class="btn btn-primary" id="load-player-btn">Upload</button>
+            </div>
+
+            <!-- Camera selfie shortcut (mobile only – opens front camera directly) -->
+            <input type="file" id="player-camera-input" accept="image/*" capture="user" style="display:none">
+            <div class="form-row mobile-only">
+                <button class="btn btn-ghost" id="player-selfie-btn" style="width:100%">
+                    📸 Take a Selfie (Camera)
+                </button>
+            </div>
+
+            <!-- Customisation -->
+            <div class="form-row">
+                <label for="player-name">Name</label>
+                <input type="text" id="player-name" maxlength="14" placeholder="PLAYER 1">
+            </div>
+            <div class="form-row">
+                <label for="player-body">Outfit</label>
+                <input type="color" id="player-body"  value="#4169E1" title="Shirt / outfit colour">
+                <input type="color" id="player-pants" value="#1a1a2e" title="Pants colour">
+                <span style="font-size:12px;color:var(--text-muted)">shirt / pants</span>
+            </div>
+        </div>
+
+        <!-- VS divider -->
+        <div class="vs-divider">VS</div>
+
+        <!-- Enemy card -->
+        <div class="fighter-card enemy-card">
+            <h2>🤖 Enemy Fighter</h2>
+
+            <div id="enemy-drop-zone" class="drop-zone">
+                <img id="enemy-face-preview" class="face-preview" alt="Enemy face preview">
+                <div class="drop-label drop-desktop">📷 Drop an enemy face here or click to browse</div>
+                <div class="drop-label drop-mobile">📷 Tap to choose an enemy photo</div>
+                <div class="hint">Or use the random generator below</div>
+            </div>
+
+            <div class="form-row">
+                <label for="enemy-sprite">Select file</label>
+                <input type="file" id="enemy-sprite" accept="image/*">
+                <button class="btn btn-primary" id="load-enemy-btn">Upload</button>
+            </div>
+            <div class="form-row">
+                <button class="btn btn-ghost" id="random-enemy-btn" style="width:100%">
+                    🎲 Generate Random Enemy Face
+                </button>
+            </div>
+
+            <div class="form-row">
+                <label for="enemy-name">Name</label>
+                <input type="text" id="enemy-name" maxlength="14" placeholder="ENEMY">
+            </div>
+            <div class="form-row">
+                <label for="enemy-body">Outfit</label>
+                <input type="color" id="enemy-body"  value="#8B0000" title="Shirt / outfit colour">
+                <input type="color" id="enemy-pants" value="#1a1a2e" title="Pants colour">
+                <span style="font-size:12px;color:var(--text-muted)">shirt / pants</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Arena / difficulty -->
+    <div class="controls-row">
+        <div class="control-group">
+            <label for="arena-select">⚔️ Battle Arena</label>
+            <select id="arena-select">
+                <option value="0">Steel Factory</option>
+                <option value="1">Sunset Dojo</option>
+                <option value="2">Arctic Peak</option>
+                <option value="3">Night City Rooftop</option>
+                <option value="4">Volcanic Crater</option>
+                <option value="5">Ancient Colosseum</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="difficulty">🧠 AI Difficulty</label>
+            <select id="difficulty">
+                <option value="0">Easy</option>
+                <option value="1" selected>Normal</option>
+                <option value="2">Hard</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Start button -->
+    <div class="start-row">
+        <button id="start-fight-btn">⚡ START FIGHT!</button>
+        <div id="status-message" class="status">Upload your face to begin</div>
+    </div>
+
+    <!-- How to play -->
+    <div class="how-to-play">
+        <h3>🕹️ Controls</h3>
+        <div class="controls-grid">
+            <!-- Keyboard controls (hidden on touch devices) -->
+            <div class="ctrl desktop-only"><kbd>← →</kbd> Move</div>
+            <div class="ctrl desktop-only"><kbd>↑</kbd> Jump</div>
+            <div class="ctrl desktop-only"><kbd>Z</kbd> Punch</div>
+            <div class="ctrl desktop-only"><kbd>X</kbd> Kick</div>
+            <div class="ctrl desktop-only"><kbd>C</kbd> Block</div>
+            <div class="ctrl desktop-only"><kbd>V</kbd> (hold) Charge Special · (release) Fire!</div>
+            <!-- Touch controls (shown on touch devices) -->
+            <div class="ctrl mobile-only">🕹️ Left / Right pads move</div>
+            <div class="ctrl mobile-only">↑ button to jump</div>
+            <div class="ctrl mobile-only">👊 Punch · 🦵 Kick</div>
+            <div class="ctrl mobile-only">🛡 Block (hold) · ⚡ Special (hold &amp; release)</div>
+            <div class="ctrl" style="grid-column:span 2">
+                💥 <strong>Combos:</strong>
+                Punch+Punch+Kick = <em>Fury Combo</em> &nbsp;|&nbsp;
+                Punch×3 = <em>Triple Threat</em> &nbsp;|&nbsp;
+                Kick+Kick+Punch = <em>Sweep Combo</em>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /setup-screen -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     GAME SCREEN  (shown when fight starts)
+═══════════════════════════════════════════════════════════ -->
+<div id="game-screen">
+    <div id="game-container"></div>
+
+    <!-- ── Mobile virtual controls ──────────────────────────
+         Shown only on touch devices (JS sets display:flex).
+         Layout:  [← ↑ →]   ............   [👊 🦵]
+                                            [🛡  ⚡]
+    ──────────────────────────────────────────────────────── -->
+    <div id="mobile-controls">
+        <!-- D-pad (movement) -->
+        <div id="mb-move-zone">
+            <button class="mb-btn" id="mb-left"  aria-label="Move left">◀</button>
+            <button class="mb-btn mb-jump" id="mb-up" aria-label="Jump">↑</button>
+            <button class="mb-btn" id="mb-right" aria-label="Move right">▶</button>
+        </div>
+
+        <!-- Action buttons -->
+        <div id="mb-action-zone">
+            <button class="mb-btn mb-punch"   id="mb-punch"   aria-label="Punch">👊</button>
+            <button class="mb-btn mb-kick"    id="mb-kick"    aria-label="Kick">🦵</button>
+            <button class="mb-btn mb-block"   id="mb-block"   aria-label="Block">🛡</button>
+            <button class="mb-btn mb-special" id="mb-special" aria-label="Special">⚡</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Scripts (order matters – dependencies first) -->
+<script src="SoundManager.js"></script>
+<script src="FaceUploadManager.js"></script>
+<script src="Fighter.js"></script>
+<script src="EnemyAI.js"></script>
+<script src="FightScene.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>

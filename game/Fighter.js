@@ -1,0 +1,1109 @@
+/**
+ * Fighter.js
+ * Base fighter class – handles procedural graphics rendering, physics,
+ * health, attacks, blocking, and combo detection.
+ *
+ * Fighters are drawn each frame using a Phaser Graphics object so that
+ * the uploaded face image can be composited directly onto the head.
+ */
+
+class Fighter {
+    // ── constants ──────────────────────────────────────────────
+    static get WIDTH()  { return 44; }
+    static get HEIGHT() { return 110; }
+    static get HEAD_RADIUS() { return 22; }
+    static get GRAVITY() { return 1400; }
+    static get GROUND_Y_OFFSET() { return 0; } // feet sit at groundY
+
+    static COMBOS = [
+        { inputs: ['punch', 'punch', 'kick'],  name: 'HADOUKEN!',      damage: 38, knockback: 180 },
+        { inputs: ['punch', 'punch', 'punch'], name: 'TRIPLE JABS!',   damage: 30, knockback: 100 },
+        { inputs: ['kick',  'kick',  'punch'], name: 'DRAGON RUSH!',   damage: 35, knockback: 160 },
+        { inputs: ['kick',  'kick',  'kick'],  name: 'HURRICANE KICK!',damage: 32, knockback: 140 },
+    ];
+
+    // ── constructor ────────────────────────────────────────────
+    constructor(scene, config) {
+        this.scene = scene;
+
+        // Position / physics
+        this.x         = config.x;
+        this.y         = config.y;      // y = ground level (feet)
+        this.groundY   = config.y;
+        this.velX      = 0;
+        this.velY      = 0;
+        this.facingRight = config.facingRight !== false; // default true
+
+        // Appearance
+        this.bodyColor   = config.bodyColor   || 0x4169E1;
+        this.pantsColor  = config.pantsColor  || 0x1a1a2e;
+        this.skinColor   = config.skinColor   || 0xF4A460;
+        this.faceDataUrl = config.faceDataUrl || null;
+        this.name        = config.name        || 'Fighter';
+
+        // Visual scale (1.0 = normal; >1.0 = bigger — used for boss enemies)
+        this._drawScale = config.drawScale || 1.0;
+
+        // Boss flag – triggers special rendering effects
+        this.isBoss = config.isBoss || false;
+
+        // Combat stats
+        this.maxHp = config.maxHp || 100;
+        this.hp    = this.maxHp;
+
+        // Super meter (SF-style gauge – fills from dealing/receiving damage)
+        this._superMeter    = 0;
+        this._superMeterMax = 100;
+
+        // State machine
+        // Valid states: 'idle'|'walking'|'jumping'|'punch'|'kick'|'crouchPunch'|'crouchKick'|
+        //               'jumpPunch'|'jumpKick'|'crouching'|'blocking'|'special'|'shoryuken'|'hit'|'ko'
+        this.state        = 'idle';
+        this.stateTimer   = 0; // countdown (ms) until state ends
+        this.isGrounded   = true;
+        this.isBlocking   = false;
+
+        // Attack parameters (keys must match the state names used for attacks)
+        this._attacks = {
+            punch:       { damage: 10, duration: 240, hitWindow: [50,  190], range: 65  },
+            kick:        { damage: 15, duration: 360, hitWindow: [80,  290], range: 85  },
+            crouchPunch: { damage: 8,  duration: 200, hitWindow: [45,  160], range: 55  },
+            crouchKick:  { damage: 18, duration: 420, hitWindow: [100, 360], range: 100 },
+            jumpPunch:   { damage: 12, duration: 280, hitWindow: [60,  230], range: 70  },
+            jumpKick:    { damage: 18, duration: 320, hitWindow: [80,  290], range: 80  },
+            special:     { damage: 0,  duration: 450, hitWindow: [0,   0  ], range: 0   },
+            shoryuken:   { damage: 32, duration: 520, hitWindow: [55,  300], range: 52  },
+        };
+
+        // Projectile fire callback – assigned by FightScene after construction
+        this._onProjectileFire = null;
+
+        // Whether an active attack has already landed (prevent multi-hit per swing)
+        this._attackHit = false;
+
+        // Combo tracking
+        this._comboBuffer  = []; // recent attack names
+        this._comboTimers  = []; // timestamps of each entry
+        this._comboTimeout = 700; // ms – window to complete a combo
+
+        // Rendering
+        this.graphics  = scene.add.graphics();
+        this.faceImage = null; // Phaser Image once loaded
+        this._loadFaceTexture();
+
+        // Hit flash
+        this._flashTimer = 0;
+
+        // Special move charge
+        this._specialCharge = 0; // 0-100
+    }
+
+    // ── face texture ──────────────────────────────────────────
+    _loadFaceTexture() {
+        if (!this.faceDataUrl) return;
+
+        const key = 'face_' + this.name + '_' + Date.now();
+        if (!this.scene.textures.exists(key)) {
+            const img = new Image();
+            img.onload = () => {
+                const tex = this.scene.textures.createCanvas(key, img.width, img.height);
+                tex.context.drawImage(img, 0, 0);
+                tex.refresh();
+                this.faceImage = this.scene.add.image(0, 0, key);
+                this.faceImage.setDisplaySize(
+                    Fighter.HEAD_RADIUS * 2,
+                    Fighter.HEAD_RADIUS * 2
+                );
+                this.faceImage.setDepth(10);
+            };
+            img.src = this.faceDataUrl;
+        }
+    }
+
+    // ── public API ────────────────────────────────────────────
+
+    /** @returns {{x:number,y:number,w:number,h:number}} */
+    getBodyHitbox() {
+        const sc = this._drawScale;
+        const crouching = this.state === 'crouching' || this.state === 'crouchPunch' || this.state === 'crouchKick';
+        const heightMul = crouching ? 0.60 : 1;
+        return {
+            x: this.x - (Fighter.WIDTH  * sc) / 2,
+            y: this.y - Fighter.HEIGHT  * heightMul * sc,
+            w: Fighter.WIDTH  * sc,
+            h: Fighter.HEIGHT * heightMul * sc,
+        };
+    }
+
+    /** Attack hitbox (extended in facing direction) when swinging */
+    getAttackHitbox() {
+        if (!this._isAttacking()) return null;
+        const attack = this._attacks[this.state];
+        if (!attack) return null;
+
+        const elapsed = attack.duration - this.stateTimer;
+        const [winStart, winEnd] = attack.hitWindow;
+        if (elapsed < winStart || elapsed > winEnd) return null;
+
+        const dir = this.facingRight ? 1 : -1;
+        const sc  = this._drawScale;
+
+        // Shoryuken has a tall upward hitbox
+        if (this.state === 'shoryuken') {
+            return {
+                x: this.x - (Fighter.WIDTH * sc) / 2 + dir * 4,
+                y: this.y - Fighter.HEIGHT * 1.8 * sc,
+                w: Fighter.WIDTH * sc + attack.range,
+                h: Fighter.HEIGHT * 1.3 * sc,
+            };
+        }
+
+        // Crouching attacks hit low; jump attacks travel with the fighter; normal attacks hit mid
+        const isCrouch = this.state === 'crouchPunch' || this.state === 'crouchKick';
+        const hitY  = isCrouch
+            ? this.y - Fighter.HEIGHT * 0.30 * sc
+            : this.y - Fighter.HEIGHT * 0.65 * sc;
+        const hitH  = isCrouch
+            ? Fighter.HEIGHT * 0.30 * sc
+            : Fighter.HEIGHT * 0.50 * sc;
+
+        return {
+            x: this.x + dir * (Fighter.WIDTH / 2 * sc),
+            y: hitY,
+            w: attack.range * sc,
+            h: hitH,
+        };
+    }
+
+    /** Deal damage to this fighter from an opponent's active attack. */
+    receiveHit(rawDamage, knockbackDir = 0, knockbackForce = 0) {
+        if (this.state === 'ko') return 0;
+        const dmg = this.isBlocking ? Math.floor(rawDamage * 0.2) : rawDamage;
+        this.hp = Math.max(0, this.hp - dmg);
+        this._flashTimer = 200;
+        // Build super meter from taking damage (SF mechanic – "revenge gauge")
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + Math.floor(dmg * 0.9));
+        if (!this.isBlocking) {
+            this._enterState('hit', 300);
+            // Apply knockback on strong hits (kick / Shoryuken)
+            if (knockbackDir !== 0 && knockbackForce > 0) {
+                this.velX = knockbackDir * knockbackForce;
+            }
+        }
+        if (this.hp === 0) {
+            this._enterState('ko', Infinity);
+        }
+        return dmg;
+    }
+
+    /** Called when we detect a combo from the buffer. Returns combo info or null. */
+    checkCombo() {
+        const now = Date.now();
+        // Purge stale entries
+        while (this._comboTimers.length > 0 && now - this._comboTimers[0] > this._comboTimeout) {
+            this._comboTimers.shift();
+            this._comboBuffer.shift();
+        }
+
+        for (const combo of Fighter.COMBOS) {
+            if (this._comboBuffer.length < combo.inputs.length) continue;
+            const slice = this._comboBuffer.slice(-combo.inputs.length);
+            if (slice.every((v, i) => v === combo.inputs[i])) {
+                // Clear buffer after combo detected
+                this._comboBuffer = [];
+                this._comboTimers = [];
+                return combo;
+            }
+        }
+        return null;
+    }
+
+    /** Start a punch – routes to crouchPunch, jumpPunch, or standing punch */
+    punch() {
+        if (!this._canAttack()) return false;
+        this._pushCombo('punch');
+        if (!this.isGrounded) {
+            this._enterState('jumpPunch', this._attacks.jumpPunch.duration);
+        } else if (this.state === 'crouching') {
+            this._enterState('crouchPunch', this._attacks.crouchPunch.duration);
+        } else {
+            this._enterState('punch', this._attacks.punch.duration);
+        }
+        this._attackHit = false;
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + 5);
+        return true;
+    }
+
+    /** Start a kick – routes to crouchKick, jumpKick, or standing kick */
+    kick() {
+        if (!this._canAttack()) return false;
+        this._pushCombo('kick');
+        if (!this.isGrounded) {
+            this._enterState('jumpKick', this._attacks.jumpKick.duration);
+        } else if (this.state === 'crouching') {
+            this._enterState('crouchKick', this._attacks.crouchKick.duration);
+        } else {
+            this._enterState('kick', this._attacks.kick.duration);
+        }
+        this._attackHit = false;
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + 5);
+        return true;
+    }
+
+    /** Start a special move (Hadouken – fires a projectile) */
+    special() {
+        if (!this._canAttack()) return false;
+        this._enterState('special', this._attacks.special.duration);
+        this._attackHit = false;
+        // Fire the projectile after a short wind-up
+        this.scene.time.delayedCall(210, () => {
+            if (this.state === 'special' && this._onProjectileFire) {
+                this._onProjectileFire();
+            }
+        });
+        return true;
+    }
+
+    /** Shoryuken – rising uppercut super move. Costs full super meter. */
+    shoryuken() {
+        if (!this._canAttack()) return false;
+        if (this._superMeter < this._superMeterMax) return false;
+        this._superMeter = 0;
+        this._enterState('shoryuken', this._attacks.shoryuken.duration);
+        this._attackHit = false;
+        // Launch upward and forward
+        this.velY       = -820;
+        this.isGrounded = false;
+        return true;
+    }
+
+    /** @returns {number} 0-100 */
+    getSuperMeter() { return this._superMeter; }
+
+    /** Add to the super meter (clamped to max). */
+    addSuperMeter(amount) {
+        this._superMeter = Math.min(this._superMeterMax, this._superMeter + amount);
+    }
+
+    /** Start/stop blocking */
+    setBlocking(flag) {
+        if (this.state === 'ko') return;
+        this.isBlocking = flag;
+        if (flag && this._canBlock()) {
+            this._enterState('blocking', Infinity);
+        } else if (!flag && this.state === 'blocking') {
+            this._enterState('idle', 0);
+        }
+    }
+
+    /** Enter or hold a crouch */
+    crouch() {
+        if (this.state === 'ko' || this._isAttacking() || this.state === 'hit' || !this.isGrounded) return;
+        if (this.state !== 'crouching') {
+            this.isBlocking = false;
+            this._enterState('crouching', Infinity);
+        }
+    }
+
+    /** Stand up from crouch */
+    standUp() {
+        if (this.state === 'crouching') {
+            this._enterState('idle', 0);
+        }
+    }
+
+    /** Move horizontally.  +1 = right, -1 = left, 0 = stop */
+    move(dir) {
+        if (this.state === 'ko' || this._isAttacking() || this.state === 'hit') return;
+        if (this.state === 'crouching' && dir !== 0) return; // can't walk while crouching
+        const speed = 220;
+        this.velX = dir * speed;
+        if (dir !== 0) {
+            this.facingRight = dir > 0;
+            if (this.isGrounded) this._enterState('walking', Infinity);
+        } else {
+            if (this.state === 'walking') this._enterState('idle', 0);
+        }
+    }
+
+    /** Jump */
+    jump() {
+        if (!this.isGrounded || this.state === 'ko' || this._isAttacking()) return;
+        this.velY = -680;
+        this.isGrounded = false;
+        this._enterState('jumping', Infinity);
+    }
+
+    /** Increase special charge (held button) */
+    chargeSpecial(deltaMs) {
+        this._specialCharge = Math.min(100, this._specialCharge + deltaMs * 0.12);
+    }
+
+    /** @returns {number} 0-100 */
+    getSpecialCharge() { return this._specialCharge; }
+
+    isKO() { return this.state === 'ko'; }
+    isAlive() { return this.hp > 0; }
+
+    // ── update ────────────────────────────────────────────────
+    update(deltaMs) {
+        if (this.state === 'ko') {
+            this._draw();
+            return;
+        }
+
+        // Gravity
+        if (!this.isGrounded) {
+            this.velY += Fighter.GRAVITY * (deltaMs / 1000);
+        }
+
+        // Integrate
+        this.x += this.velX * (deltaMs / 1000);
+        this.y += this.velY * (deltaMs / 1000);
+
+        // Ground clamp
+        if (this.y >= this.groundY) {
+            this.y = this.groundY;
+            this.velY = 0;
+            if (!this.isGrounded) {
+                this.isGrounded = true;
+                if (['jumping', 'jumpPunch', 'jumpKick'].includes(this.state)) {
+                    this._enterState('idle', 0);
+                }
+            }
+        }
+
+        // Decelerate horizontal (friction) when not explicitly moving
+        if (this.state !== 'walking') {
+            this.velX *= Math.pow(0.01, deltaMs / 1000);
+            if (Math.abs(this.velX) < 1) this.velX = 0;
+        }
+
+        // State timer countdown
+        if (this.stateTimer !== Infinity) {
+            this.stateTimer -= deltaMs;
+            if (this.stateTimer <= 0) {
+                this._onStateExpired();
+            }
+        }
+
+        // Hit flash countdown
+        if (this._flashTimer > 0) this._flashTimer -= deltaMs;
+
+        // Special charge decay
+        if (!this._isAttacking()) {
+            this._specialCharge = Math.max(0, this._specialCharge - deltaMs * 0.03);
+        }
+
+        this._draw();
+    }
+
+    // ── private helpers ───────────────────────────────────────
+
+    _isAttacking() {
+        return ['punch', 'kick', 'crouchPunch', 'crouchKick', 'jumpPunch', 'jumpKick', 'special', 'shoryuken'].includes(this.state);
+    }
+
+    _canAttack() {
+        // Allow attacks from ground states OR while jumping (for air attacks)
+        return !this._isAttacking() &&
+               this.state !== 'hit' &&
+               this.state !== 'ko';
+    }
+
+    _canBlock() {
+        return this.isGrounded && !this._isAttacking() && this.state !== 'ko';
+    }
+
+    _enterState(state, durationMs) {
+        this.state      = state;
+        this.stateTimer = durationMs;
+        if (state !== 'blocking') this.isBlocking = false;
+    }
+
+    _onStateExpired() {
+        switch (this.state) {
+            case 'punch':
+            case 'kick':
+            case 'special':
+            case 'hit':
+                this._enterState('idle', 0);
+                break;
+            case 'crouchPunch':
+            case 'crouchKick':
+                this._enterState('crouching', Infinity);
+                break;
+            case 'jumpPunch':
+            case 'jumpKick':
+            case 'shoryuken':
+                // Return to jumping (or idle if already landed)
+                if (this.isGrounded) {
+                    this._enterState('idle', 0);
+                } else {
+                    this._enterState('jumping', Infinity);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    _pushCombo(action) {
+        this._comboBuffer.push(action);
+        this._comboTimers.push(Date.now());
+        // Keep buffer bounded
+        if (this._comboBuffer.length > 5) {
+            this._comboBuffer.shift();
+            this._comboTimers.shift();
+        }
+    }
+
+    // ── drawing ───────────────────────────────────────────────
+    _draw() {
+        const g   = this.graphics;
+        const now = Date.now();
+        g.clear();
+
+        const flashing = this._flashTimer > 0 && Math.floor(this._flashTimer / 50) % 2 === 0;
+        const alpha    = this.state === 'ko' ? 0.48 : 1;
+        g.setAlpha(alpha);
+
+        const dir = this.facingRight ? 1 : -1;
+        const x   = this.x;
+        const y   = this.y; // feet
+
+        // ── Per-state animation parameters ───────────────────
+        // All offsets are in game units; angles in radians.
+
+        let bodyLeanX    = 0;   // torso/head horizontal offset
+        let crouchOffset = 0;   // feet-to-hip distance change (positive = squat)
+        let headOffX     = 0;   // extra head horizontal offset
+        let headOffY     = 0;   // extra head vertical offset
+
+        let leftLegAngle  = 0;
+        let rightLegAngle = 0;
+        let leftArmAngle  = 0;
+        let rightArmAngle = 0;
+
+        // Pre-compute progress values (0→1 over the state duration)
+        const punchProg      = this.state === 'punch'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.punch.duration) : 0;
+        const kickProg       = this.state === 'kick'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.kick.duration) : 0;
+        const specialProg    = this.state === 'special'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.special.duration) : 0;
+        const hitProg        = this.state === 'hit'
+            ? Math.max(0, 1 - this.stateTimer / 300) : 0;
+        const crouchPunchProg = this.state === 'crouchPunch'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.crouchPunch.duration) : 0;
+        const crouchKickProg  = this.state === 'crouchKick'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.crouchKick.duration) : 0;
+        const jumpPunchProg   = this.state === 'jumpPunch'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.jumpPunch.duration) : 0;
+        const jumpKickProg    = this.state === 'jumpKick'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.jumpKick.duration) : 0;
+        const shoryukenProg   = this.state === 'shoryuken'
+            ? Math.max(0, 1 - this.stateTimer / this._attacks.shoryuken.duration) : 0;
+
+        switch (this.state) {
+            case 'idle': {
+                // SF-style guard stance: low crouch, both fists raised, slight forward lean
+                const breath  = Math.sin(now / 600) * 1.5;
+                crouchOffset  = 7 + breath;
+                bodyLeanX     = dir * 4;
+                leftArmAngle  = dir * 0.72;   // lead guard arm forward
+                rightArmAngle = dir * 0.36;   // rear arm close to chin
+                leftLegAngle  = -0.13;
+                rightLegAngle =  0.13;
+                break;
+            }
+            case 'walking': {
+                // Keep guard up while moving – SF side-step walk
+                const t = now / 180;
+                leftLegAngle  =  Math.sin(t) * 0.48;
+                rightLegAngle = -Math.sin(t) * 0.48;
+                leftArmAngle  = dir * 0.62 + Math.sin(t) * 0.14;
+                rightArmAngle = dir * 0.28 - Math.sin(t) * 0.14;
+                bodyLeanX     = dir * 5;
+                crouchOffset  = 5;
+                break;
+            }
+            case 'punch': {
+                // Two-phase punch: wind-up (cock back) → explosive drive → retract
+                // punchProg 0→0.18 = wind-up, 0.18→0.70 = drive, 0.70→1 = retract
+                const windUp = Math.max(0, Math.min(1, punchProg / 0.18));
+                const drive  = Math.max(0, Math.min(1, (punchProg - 0.18) / 0.52));
+                const driveS = Math.sin(drive * Math.PI);
+                // During wind-up: shoulder pulls back slightly
+                const windBack = Math.sin(windUp * Math.PI * 0.5) * 0.4;
+                rightArmAngle = dir * (driveS * 1.72 - windBack);
+                leftArmAngle  = dir * (0.35 + windBack * 0.3);
+                bodyLeanX     = dir * (driveS * 16 - windBack * 4);
+                headOffX      = dir * driveS * 6;
+                leftLegAngle  = -dir * 0.12;
+                rightLegAngle =  dir * 0.12;
+                crouchOffset  = driveS * 4;
+                // _punchPhase used for motion-trail rendering below
+                this._punchDriveS = driveS;
+                break;
+            }
+            case 'kick': {
+                // SF roundhouse: leg rises to ~1.68 rad, body counter-leans dramatically
+                const s = Math.sin(kickProg * Math.PI);
+                rightLegAngle =  dir * s * 1.68;   // higher leg raise than before
+                bodyLeanX     = -dir * s * 11;
+                leftArmAngle  =  dir * s * 0.62;
+                rightArmAngle = -dir * s * 0.42;
+                crouchOffset  = -s * 10;
+                headOffX      = -dir * s * 4;
+                break;
+            }
+            case 'crouching': {
+                // Deep crouch with low guard – reduces hitbox
+                crouchOffset  = 25;
+                bodyLeanX     = dir * 3;
+                leftArmAngle  = dir * 0.55;
+                rightArmAngle = dir * 0.25;
+                leftLegAngle  =  dir * 0.18;
+                rightLegAngle = -dir * 0.18;
+                break;
+            }
+            case 'crouchPunch': {
+                // Quick low jab from crouch
+                const s = Math.sin(crouchPunchProg * Math.PI);
+                crouchOffset  = 23;
+                bodyLeanX     = dir * (3 + s * 9);
+                rightArmAngle = dir * s * 1.45;
+                leftArmAngle  = dir * 0.30;
+                leftLegAngle  =  dir * 0.18;
+                rightLegAngle = -dir * 0.18;
+                break;
+            }
+            case 'crouchKick': {
+                // Low sweep: kicking leg extends wide and low
+                const s = Math.sin(crouchKickProg * Math.PI);
+                crouchOffset  = 26;
+                rightLegAngle = dir * s * 1.58;
+                bodyLeanX     = -dir * s * 6;
+                leftArmAngle  = dir * 0.30;
+                rightArmAngle = dir * s * 0.20;
+                leftLegAngle  =  dir * 0.12;
+                break;
+            }
+            case 'jumpPunch': {
+                // Aerial punch: arm drives diagonally downward-forward
+                const s = Math.sin(jumpPunchProg * Math.PI);
+                leftLegAngle  = -0.32;
+                rightLegAngle =  0.32;
+                rightArmAngle = dir * s * 1.42;
+                leftArmAngle  = dir * 0.28;
+                headOffX      = dir * s * 4;
+                bodyLeanX     = dir * s * 7;
+                break;
+            }
+            case 'jumpKick': {
+                // Flying kick: leg thrusts forward-diagonally
+                const s = Math.sin(jumpKickProg * Math.PI);
+                rightLegAngle = dir * s * 1.52;
+                leftLegAngle  = -0.25;
+                leftArmAngle  = -dir * s * 0.42;
+                rightArmAngle = -dir * s * 0.28;
+                bodyLeanX     = dir * s * 8;
+                break;
+            }
+            case 'blocking': {
+                // SF high guard: forearms crossed in front of face, deep crouch
+                crouchOffset  =  8;
+                leftArmAngle  =  dir * 1.08;
+                rightArmAngle = -dir * 0.98;
+                leftLegAngle  = -0.12;
+                rightLegAngle =  0.12;
+                bodyLeanX     = -dir * 2;
+                break;
+            }
+            case 'special': {
+                // Hadouken pose: arms thrust forward, palms cupped together
+                const pulse   = Math.sin(now / 65) * 0.18;
+                leftArmAngle  = dir * (1.12 + pulse);
+                rightArmAngle = dir * (1.38 + pulse);
+                leftLegAngle  = -0.16;
+                rightLegAngle =  0.16;
+                bodyLeanX     = dir * 9;
+                crouchOffset  = 6;
+                break;
+            }
+            case 'hit': {
+                // Dramatic snap-back with full-body recoil
+                bodyLeanX     = -dir * hitProg * 18;
+                headOffX      = -dir * hitProg * 11;
+                headOffY      =  hitProg * 7;
+                leftArmAngle  = -dir * hitProg * 0.62;
+                rightArmAngle = -dir * hitProg * 0.62;
+                crouchOffset  =  hitProg * 5;
+                break;
+            }
+            case 'jumping': {
+                // Knees pulled up, arms guard while airborne
+                leftLegAngle  = -0.42;
+                rightLegAngle =  0.42;
+                leftArmAngle  =  dir * 0.62;
+                rightArmAngle =  dir * 0.32;
+                break;
+            }
+            case 'shoryuken': {
+                // Rising Dragon Punch – arm drives straight upward, body rotates forward
+                const s = Math.sin(shoryukenProg * Math.PI);
+                rightArmAngle = -dir * (1.05 + s * 0.75);  // arm thrusts UP
+                leftArmAngle  =  dir * 0.22;
+                leftLegAngle  = -0.38;
+                rightLegAngle =  0.38;
+                bodyLeanX     =  dir * s * 12;
+                headOffX      =  dir * s * 5;
+                headOffY      = -s * 5;  // slight upward head surge
+                crouchOffset  = -s * 6;
+                break;
+            }
+            case 'ko': {
+                // Dramatic backward collapse
+                bodyLeanX     = dir * 22;
+                headOffX      = dir * 14;
+                headOffY      =  12;
+                leftArmAngle  =  dir * 0.72;
+                rightArmAngle =  dir * 0.45;
+                leftLegAngle  =  dir * 0.26;
+                rightLegAngle = -dir * 0.18;
+                crouchOffset  =  8;
+                break;
+            }
+        }
+
+        // ── Layout ───────────────────────────────────────────
+        const sc     = this._drawScale;   // visual scale factor (boss = >1)
+        const legW   = 14 * sc;
+        const legH   = 34 * sc;
+        const torsoH = 44 * sc;
+        const headR  = Fighter.HEAD_RADIUS * sc;
+
+        const drawY   = y + crouchOffset * sc;
+        const hipY    = drawY - legH;
+        const torsoY  = hipY - torsoH;
+        const torsoX  = x + bodyLeanX * sc;
+
+        // ── Boss aura (drawn behind everything) ───────────────
+        if (this.isBoss) {
+            const pulse = Math.sin(now / 80) * 0.10 + 0.22;
+            g.fillStyle(0xFF2200, pulse);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.80);
+            // Flame spikes
+            for (let fi = 0; fi < 6; fi++) {
+                const fa = (now / 500 + fi * Math.PI / 3);
+                const fr = Fighter.HEIGHT * sc * (0.55 + Math.sin(now / 120 + fi) * 0.12);
+                g.fillStyle(0xFF6600, 0.18);
+                g.fillCircle(x + Math.cos(fa) * fr * 0.7, (y - Fighter.HEIGHT * sc * 0.5) + Math.sin(fa) * fr * 0.4, 10 * sc);
+            }
+            // Dark inner shadow to separate from aura
+            g.fillStyle(0x000000, 0.20);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.40);
+        }
+
+        // ── Legs ─────────────────────────────────────────────
+        const legColor  = flashing ? 0xff3333 : this.pantsColor;
+        // Derive boot color: darken the pants colour by ~45 %
+        const pantsRed   = ((this.pantsColor >> 16) & 0xff) * 0.55 | 0;
+        const pantsGreen = ((this.pantsColor >>  8) & 0xff) * 0.55 | 0;
+        const pantsBlue  = (this.pantsColor         & 0xff) * 0.55 | 0;
+        const bootColor = flashing ? 0xff3333 : ((pantsRed << 16) | (pantsGreen << 8) | pantsBlue);
+        this._drawLeg(g, x - 8 * sc, hipY, legW, legH, leftLegAngle,  legColor, bootColor);
+        this._drawLeg(g, x + 8 * sc, hipY, legW, legH, rightLegAngle, legColor, bootColor);
+
+        // ── Torso ─────────────────────────────────────────────
+        const torsoColor = flashing ? 0xff3333 : this.bodyColor;
+        const shW = 20 * sc;   // half-width at shoulders (top)
+        const waW = 14 * sc;   // half-width at waist (bottom)
+
+        // Drop shadow (offset 2 px down-right)
+        g.fillStyle(0x000000, 0.22);
+        g.beginPath();
+        g.moveTo(torsoX - shW + 2, torsoY + 2);
+        g.lineTo(torsoX + shW + 2, torsoY + 2);
+        g.lineTo(torsoX + waW + 2, torsoY + torsoH + 2);
+        g.lineTo(torsoX - waW + 2, torsoY + torsoH + 2);
+        g.closePath();
+        g.fillPath();
+
+        // Main trapezoid body – wider at shoulders, narrower at waist
+        g.fillStyle(torsoColor, 1);
+        g.beginPath();
+        g.moveTo(torsoX - shW, torsoY);
+        g.lineTo(torsoX + shW, torsoY);
+        g.lineTo(torsoX + waW, torsoY + torsoH);
+        g.lineTo(torsoX - waW, torsoY + torsoH);
+        g.closePath();
+        g.fillPath();
+
+        // Upper-chest highlight (catches light from above)
+        g.fillStyle(0xffffff, 0.13);
+        g.beginPath();
+        g.moveTo(torsoX - shW, torsoY);
+        g.lineTo(torsoX + shW, torsoY);
+        g.lineTo(torsoX + waW + (shW - waW) * 0.5, torsoY + torsoH * 0.46);
+        g.lineTo(torsoX - waW - (shW - waW) * 0.5, torsoY + torsoH * 0.46);
+        g.closePath();
+        g.fillPath();
+
+        // Belt / waist band
+        const beltFrac  = 0.80;
+        const beltY     = torsoY + torsoH * beltFrac;
+        const beltHalfW = waW + (shW - waW) * (1 - beltFrac);
+        g.fillStyle(0x000000, 0.30);
+        g.fillRect(torsoX - beltHalfW, beltY, beltHalfW * 2, torsoH * 0.16);
+
+        // Collar / neckline detail at top
+        g.fillStyle(0x000000, 0.20);
+        g.fillRoundedRect(torsoX - 8, torsoY, 16, 9, 3);
+
+        // ── Special: Hadouken energy glow around hands ───────
+        if (this.state === 'special') {
+            const pulse   = Math.sin(now / 60) * 0.20 + 0.80;
+            // Glow aura around the torso
+            g.fillStyle(0x00AAFF, 0.10 + Math.sin(now / 80) * 0.05);
+            g.fillCircle(torsoX, torsoY + torsoH * 0.5, 36 * pulse);
+            // Energy ball between cupped hands (in front of fighter)
+            const ballX = torsoX + dir * 32;
+            const ballY = torsoY + torsoH * 0.35;
+            const ballR  = 10 + Math.sin(now / 55) * 3;
+            // Outer halo
+            g.fillStyle(0x0044FF, 0.22);
+            g.fillCircle(ballX, ballY, ballR * 2.2);
+            // Core
+            g.fillStyle(0x00CCFF, 0.75 + Math.sin(now / 60) * 0.15);
+            g.fillCircle(ballX, ballY, ballR);
+            // Inner bright spot
+            g.fillStyle(0xffffff, 0.65);
+            g.fillCircle(ballX - ballR * 0.30, ballY - ballR * 0.30, ballR * 0.38);
+        }
+
+        // ── Shoryuken: rising energy flame ────────────────────
+        if (this.state === 'shoryuken') {
+            const s     = Math.sin(shoryukenProg * Math.PI);
+            const pulse = Math.sin(now / 55) * 0.18 + 0.72;
+            // Outer fire halo
+            g.fillStyle(0xFF4400, 0.18 * pulse);
+            g.fillCircle(torsoX, torsoY, 40 + s * 22);
+            // Mid flame
+            g.fillStyle(0xFF8800, 0.40 * pulse);
+            g.fillCircle(torsoX + dir * 8, torsoY - s * 14, 22 + s * 12);
+            // Core bright tip (fist position)
+            const fistX = torsoX + dir * 14 + dir * s * 10;
+            const fistY = torsoY - 10 - s * 22;
+            g.fillStyle(0xFFDD00, 0.80);
+            g.fillCircle(fistX, fistY, 12 + s * 6);
+            g.fillStyle(0xffffff, 0.55);
+            g.fillCircle(fistX - 3, fistY - 3, 5);
+        }
+
+        // ── Super-meter full: golden power aura ───────────────
+        if (this._superMeter >= this._superMeterMax && this.state !== 'shoryuken') {
+            const pulse = Math.sin(now / 90) * 0.08 + 0.12;
+            g.fillStyle(0xFFD700, pulse);
+            g.fillCircle(x, y - Fighter.HEIGHT * sc * 0.5, Fighter.HEIGHT * sc * 0.68);
+            // Orbiting sparks
+            for (let i = 0; i < 4; i++) {
+                const angle = now / 320 + i * Math.PI / 2;
+                const sx = x  + Math.cos(angle) * 30 * sc;
+                const sy = (y - Fighter.HEIGHT * sc * 0.5) + Math.sin(angle) * 18 * sc;
+                g.fillStyle(0xFFFF44, 0.65);
+                g.fillCircle(sx, sy, 3.5 * sc);
+            }
+        }
+
+        // ── Arms ─────────────────────────────────────────────
+        const armColor  = flashing ? 0xff3333 : this.skinColor;
+        const armW      = 12 * sc;
+        const armH      = 30 * sc;
+        const shoulderY = torsoY + 4 * sc;
+        const shldrOff  = 18 * sc;  // lateral shoulder offset from torso centre
+
+        // Shoulder caps (drawn behind arms so arms appear to come out of them)
+        g.fillStyle(flashing ? 0xff3333 : this.bodyColor, 1);
+        g.fillCircle(torsoX - shldrOff, shoulderY, 10 * sc);
+        g.fillCircle(torsoX + shldrOff, shoulderY, 10 * sc);
+        // Darker dimple for depth
+        g.fillStyle(0x000000, 0.22);
+        g.fillCircle(torsoX - shldrOff, shoulderY + 3 * sc, 5 * sc);
+        g.fillCircle(torsoX + shldrOff, shoulderY + 3 * sc, 5 * sc);
+
+        // ── Punch motion trail (ghost arms) ──────────────────
+        if (this.state === 'punch' && (this._punchDriveS || 0) > 0.18) {
+            const trailS = this._punchDriveS;
+            for (let t = 1; t <= 3; t++) {
+                const trailAngle = dir * Math.sin(Math.max(0, trailS - t * 0.16) * Math.PI) * 1.72;
+                const trailAlpha = (0.18 - t * 0.04) * trailS;
+                if (trailAlpha <= 0) break;
+                g.fillStyle(0xffffff, trailAlpha);
+                const trailEndX = torsoX + dir * shldrOff + Math.sin(trailAngle) * armH;
+                const trailEndY = shoulderY + Math.cos(trailAngle) * armH;
+                g.beginPath();
+                g.moveTo(torsoX + dir * (shldrOff - armW / 2), shoulderY);
+                g.lineTo(torsoX + dir * (shldrOff + armW / 2), shoulderY);
+                g.lineTo(trailEndX + dir * armW / 2, trailEndY);
+                g.lineTo(trailEndX - dir * armW / 2, trailEndY);
+                g.closePath(); g.fillPath();
+            }
+        }
+
+        this._drawArm(g, torsoX - shldrOff, shoulderY, armW, armH, leftArmAngle,  armColor);
+        this._drawArm(g, torsoX + shldrOff, shoulderY, armW, armH, rightArmAngle, armColor);
+
+        // Fist knuckle at tip of front arm during attacks
+        const showFist = (this.state === 'punch'       && punchProg       > 0.22 && punchProg       < 0.88)
+                      || (this.state === 'crouchPunch' && crouchPunchProg > 0.30 && crouchPunchProg < 0.85)
+                      || (this.state === 'jumpPunch'   && jumpPunchProg   > 0.28 && jumpPunchProg   < 0.88)
+                      || (this.state === 'shoryuken'   && shoryukenProg   > 0.15 && shoryukenProg   < 0.75);
+        if (showFist) {
+            const fistX = torsoX + dir * (shldrOff + Math.sin(rightArmAngle) * armH);
+            const fistY = shoulderY + Math.cos(rightArmAngle) * armH;
+            const fistColor = this.state === 'shoryuken'
+                ? (flashing ? 0xff3333 : 0xFFAA00)
+                : (flashing ? 0xff3333 : this.skinColor);
+            g.fillStyle(fistColor, 1);
+            g.fillCircle(fistX, fistY, (this.state === 'shoryuken' ? 10 : 9) * sc);
+            // Knuckle wraps (dark stripes over the fist)
+            if (this.state !== 'shoryuken') {
+                g.fillStyle(0x000000, 0.30);
+                for (let ki = 0; ki < 3; ki++) {
+                    g.fillRect(fistX - 4 + ki * 3, fistY - 5, 2, 10);
+                }
+            }
+            // Impact spark on peak drive
+            const driveS = this._punchDriveS || 0;
+            if (driveS > 0.55 && driveS < 0.78) {
+                const sparkSize = (driveS - 0.55) / 0.23 * 12 * sc;
+                g.fillStyle(0xFFFFAA, 0.55);
+                g.fillCircle(fistX + dir * sparkSize, fistY, sparkSize * 0.7);
+                g.fillStyle(0xFFDD44, 0.80);
+                g.fillCircle(fistX + dir * sparkSize * 0.6, fistY, sparkSize * 0.35);
+            }
+            if (this.state === 'shoryuken') {
+                // Extra energy ring on fist
+                g.lineStyle(2 * sc, 0xFFFF00, 0.7);
+                g.strokeCircle(fistX, fistY, 14 * sc);
+            }
+        }
+
+        // Boot / foot at tip of kicking leg during kick states
+        const showBoot = (this.state === 'kick'      && kickProg      > 0.28 && kickProg      < 0.88)
+                      || (this.state === 'crouchKick' && crouchKickProg > 0.28 && crouchKickProg < 0.88)
+                      || (this.state === 'jumpKick'   && jumpKickProg   > 0.25 && jumpKickProg   < 0.90);
+        if (showBoot) {
+            const bootX = x + 8 * sc + Math.sin(rightLegAngle) * legH;
+            const bootY = hipY  + Math.cos(rightLegAngle) * legH;
+            g.fillStyle(flashing ? 0xff3333 : this.pantsColor, 1);
+            g.fillCircle(bootX, bootY, 9 * sc);
+        }
+
+        // ── Blocking shield ──────────────────────────────────
+        if (this.state === 'blocking') {
+            this._drawShield(g, torsoX, torsoY, torsoH, dir, flashing, sc);
+        }
+
+        // ── Head ─────────────────────────────────────────────
+        const headCX = torsoX + headOffX * sc;
+        const headCY = torsoY - headR - 2 * sc + headOffY * sc;
+
+        // Neck connecting head to torso
+        const neckColor = flashing ? 0xff3333 : this.skinColor;
+        g.fillStyle(neckColor, 1);
+        g.fillRoundedRect(headCX - 5 * sc, torsoY - 11 * sc, 10 * sc, 13 * sc, 2);
+
+        if (this.faceImage) {
+            this.faceImage.setPosition(headCX, headCY);
+            this.faceImage.setScale(sc);
+            this.faceImage.setAlpha(alpha);
+            this.faceImage.setFlipX(!this.facingRight);
+            if (flashing) {
+                this.faceImage.setTint(0xff6666);
+            } else {
+                this.faceImage.clearTint();
+            }
+        } else {
+            // Fallback procedural head
+            const headColor = flashing ? 0xff3333 : this.skinColor;
+
+            // Shadow
+            g.fillStyle(0x000000, 0.18);
+            g.fillCircle(headCX + 2, headCY + 2, headR);
+
+            g.fillStyle(headColor, 1);
+            g.fillCircle(headCX, headCY, headR);
+
+            // Highlight
+            g.fillStyle(0xffffff, 0.14);
+            g.fillCircle(headCX - 6 * sc, headCY - 6 * sc, headR * 0.55);
+
+            // Headband / hair tuft on top
+            if (!flashing) {
+                // Dark hair
+                g.fillStyle(0x1a0a00, 0.85);
+                g.fillEllipse(headCX, headCY - headR * 0.60,
+                    headR * 1.55, headR * 0.65);
+                // Coloured headband stripe (boss gets red headband)
+                g.fillStyle(this.isBoss ? 0xFF2200 : this.bodyColor, 0.90);
+                g.fillRect(headCX - headR * 0.80,
+                           headCY - headR * 0.30,
+                           headR * 1.60, 5 * sc);
+            }
+
+            // Eyes
+            const eyeColor = (this.state === 'hit' || this.state === 'ko') ? 0x555555 : 0x000000;
+            g.fillStyle(eyeColor, 0.75);
+            g.fillCircle(headCX - 7 * sc, headCY - 4 * sc, 3.5 * sc);
+            g.fillCircle(headCX + 7 * sc, headCY - 4 * sc, 3.5 * sc);
+            // Eye whites / pupils (boss gets glowing red eyes)
+            if (this.state !== 'hit' && this.state !== 'ko') {
+                g.fillStyle(this.isBoss ? 0xFF3300 : 0xffffff, 0.70);
+                g.fillCircle(headCX - 7 * sc + dir, headCY - 5 * sc, 1.5 * sc);
+                g.fillCircle(headCX + 7 * sc + dir, headCY - 5 * sc, 1.5 * sc);
+            }
+
+            // Expression mouth
+            g.lineStyle(2 * sc, 0x000000, 0.65);
+            g.beginPath();
+            if (this.state === 'hit' || this.state === 'ko') {
+                // Grimace
+                g.arc(headCX, headCY + 9 * sc, 7 * sc, Math.PI, 0);
+            } else if (['punch','kick','crouchPunch','crouchKick','jumpPunch','jumpKick','special','shoryuken'].includes(this.state)) {
+                // Fierce war cry
+                g.arc(headCX, headCY + 3 * sc, 9 * sc, 0.15, Math.PI - 0.15);
+            } else {
+                // Focused guard
+                g.arc(headCX, headCY + 6 * sc, 7 * sc, 0.1, Math.PI - 0.1);
+            }
+            g.strokePath();
+        }
+
+        // ── Special charge meter (below fighter) ──────────────
+        if (this._specialCharge > 8) {
+            const meterW = 44;
+            const meterH = 6;
+            const meterX = x - meterW / 2;
+            const meterY = y - Fighter.HEIGHT - 16;
+            const fill   = this._specialCharge / 100;
+
+            // Background track
+            g.fillStyle(0x001833, 0.7);
+            g.fillRoundedRect(meterX, meterY, meterW, meterH, 3);
+
+            // Fill – cyan/blue gradient approximation via two rects
+            g.fillStyle(0x0088CC, 0.9);
+            g.fillRoundedRect(meterX, meterY, meterW * fill, meterH, 3);
+            g.fillStyle(0x00DDFF, 0.55);
+            g.fillRoundedRect(meterX, meterY, meterW * fill, meterH / 2, 3);
+
+            // Border
+            g.lineStyle(1, 0x0066AA, 0.8);
+            g.strokeRoundedRect(meterX, meterY, meterW, meterH, 3);
+        }
+    }
+
+    /** Draw a kite shield held in front of the fighter while blocking */
+    _drawShield(g, torsoX, torsoY, torsoH, dir, flashing, sc = 1) {
+        // Shield is held on the forward arm side, in front of the body
+        const shieldCX = torsoX + dir * 28 * sc;
+        const shieldCY = torsoY + torsoH * 0.28;
+        const shW      = 16 * sc;   // half-width of shield
+        const shH      = 30 * sc;   // half-height of shield
+
+        // Drop shadow
+        g.fillStyle(0x000000, 0.30);
+        g.beginPath();
+        g.moveTo(shieldCX + dir * 2 + 2, shieldCY - shH + 2);
+        g.lineTo(shieldCX + dir * shW + 2, shieldCY + 2);
+        g.lineTo(shieldCX + dir * 2 + 2, shieldCY + shH + 2);
+        g.lineTo(shieldCX - dir * shW + 2, shieldCY + 2);
+        g.closePath(); g.fillPath();
+
+        // Main kite shape: top two diagonals + bottom point
+        const shieldColor = flashing ? 0xff3333 : 0x4a4a6a;
+        g.fillStyle(shieldColor, 1);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);          // top centre
+        g.lineTo(shieldCX + dir * shW, shieldCY);    // right side
+        g.lineTo(shieldCX, shieldCY + shH);           // bottom point
+        g.lineTo(shieldCX - dir * shW, shieldCY);    // left side
+        g.closePath(); g.fillPath();
+
+        // Rim / border
+        g.lineStyle(3 * sc, flashing ? 0xff9999 : 0x8a8aaa, 1);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);
+        g.lineTo(shieldCX + dir * shW, shieldCY);
+        g.lineTo(shieldCX, shieldCY + shH);
+        g.lineTo(shieldCX - dir * shW, shieldCY);
+        g.closePath(); g.strokePath();
+
+        // Horizontal cross-bar
+        g.lineStyle(2 * sc, flashing ? 0xff9999 : 0x7a7a9a, 0.75);
+        g.beginPath();
+        g.moveTo(shieldCX - dir * shW + 2, shieldCY);
+        g.lineTo(shieldCX + dir * shW - 2, shieldCY);
+        g.strokePath();
+
+        // Central boss (rounded knob)
+        g.fillStyle(flashing ? 0xff9999 : 0xAAAAAA, 1);
+        g.fillCircle(shieldCX, shieldCY, 5 * sc);
+        g.fillStyle(0xffffff, 0.35);
+        g.fillCircle(shieldCX - 1, shieldCY - 1, 2 * sc);
+
+        // Shield surface shading (lighter left half)
+        g.fillStyle(0xffffff, 0.08);
+        g.beginPath();
+        g.moveTo(shieldCX, shieldCY - shH);
+        g.lineTo(shieldCX + dir * shW, shieldCY);
+        g.lineTo(shieldCX, shieldCY);
+        g.closePath(); g.fillPath();
+    }
+
+    /** Draw a single leg rotated around its attachment point */
+    _drawLeg(g, baseX, topY, w, h, angle, color, bootColor) {
+        g.save();
+        g.translateCanvas(baseX, topY);
+        g.rotateCanvas(angle);
+        // Main leg (thigh + shin)
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(-w / 2, 0, w, h, 3);
+        // Shin highlight for depth
+        g.fillStyle(0xffffff, 0.10);
+        g.fillRoundedRect(-w / 2 + 2, 2, w / 2, h * 0.65, 2);
+        // Boot / shoe at the foot end
+        if (bootColor !== undefined) {
+            g.fillStyle(bootColor, 1);
+            g.fillRoundedRect(-(w + 4) / 2, h - 7, w + 4, 9, 3);
+        }
+        g.restore();
+    }
+
+    /** Draw a single arm rotated around its attachment point */
+    _drawArm(g, baseX, topY, w, h, angle, color) {
+        g.save();
+        g.translateCanvas(baseX, topY);
+        g.rotateCanvas(angle);
+        // Arm body
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(-w / 2, 0, w, h, 4);
+        // Highlight strip (gives cylindrical look)
+        g.fillStyle(0xffffff, 0.18);
+        g.fillRoundedRect(-w / 2 + 2, 2, w / 2 - 1, h * 0.62, 3);
+        // Forearm tape/wraps — two dark bands near the fist end
+        g.fillStyle(0x000000, 0.22);
+        g.fillRect(-w / 2 + 1, h * 0.70, w - 2, 3);
+        g.fillRect(-w / 2 + 1, h * 0.80, w - 2, 3);
+        g.restore();
+    }
+
+    /** Clean up Phaser objects */
+    destroy() {
+        this.graphics.destroy();
+        if (this.faceImage) this.faceImage.destroy();
+    }
+}
